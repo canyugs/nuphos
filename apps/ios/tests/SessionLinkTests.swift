@@ -1,0 +1,34 @@
+import Foundation
+
+enum SessionLinkTests {
+    static func run() {
+        buildsTheDesktopSessionURL()
+        usesTheConversationsOwnTeam()
+        escapesSegmentsAndRefusesEmptyOnes()
+        print("Session link passed")
+    }
+
+    private static func url(_ team: String, _ session: String) -> String? {
+        SessionLink.url(teamId: team, sessionId: session)?.absoluteString
+    }
+
+    private static func buildsTheDesktopSessionURL() {
+        precondition(
+            url("team-1", "ses_abc") == "https://nuphos.ai/teams/team-1/agent/ses_abc",
+            "expected desktop's /teams/<team>/agent/<session> form, got \(String(describing: url("team-1", "ses_abc")))"
+        )
+    }
+
+    private static func usesTheConversationsOwnTeam() {
+        // A chat opened from another team keeps that team in its link rather
+        // than whichever team happens to be selected.
+        precondition(url("other-team", "ses_abc") == "https://nuphos.ai/teams/other-team/agent/ses_abc")
+        precondition(url("team-1", "ses_abc") != url("other-team", "ses_abc"))
+    }
+
+    private static func escapesSegmentsAndRefusesEmptyOnes() {
+        precondition(url("team/with space", "a b") == "https://nuphos.ai/teams/team%2Fwith%20space/agent/a%20b")
+        precondition(SessionLink.url(teamId: "", sessionId: "ses_abc") == nil)
+        precondition(SessionLink.url(teamId: "team-1", sessionId: "") == nil)
+    }
+}

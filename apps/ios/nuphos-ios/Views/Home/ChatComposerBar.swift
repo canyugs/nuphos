@@ -1,0 +1,317 @@
+import PhotosUI
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// The composer. Collapsed it is a single capsule; once focused (or holding
+/// text/attachments) it opens into rows: a drag handle, optional controls,
+/// the input on its own line, attachment tiles, then `+` and send/stop.
+struct ChatComposerBar<Controls: View>: View {
+    @Binding var text: String
+    var isStreaming = false
+    var canSend = true
+    var canStop = false
+    var sendsDuringTurn = false
+    /// The turn accepts steering, so what is typed mid-reply goes into it.
+    var canSteer = false
+    var allowsAttachments = true
+    var onSend: (ComposerSubmission) -> Void
+    var onStop: (() -> Void)? = nil
+    /// Shown above the input while expanded (IAM picker, permission mode).
+    @ViewBuilder var controls: () -> Controls
+
+    @FocusState private var focused: Bool
+    @State private var attachments: [ComposerAttachment] = []
+    @State private var collapsedByUser = false
+    @State private var showPhotos = false
+    @State private var showFiles = false
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var handleDrag: CGFloat = 0
+
+    private var hasText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var hasPayload: Bool { hasText || !attachments.isEmpty }
+    private var expanded: Bool { (focused || hasPayload) && !collapsedByUser }
+    private var hasControls: Bool { Controls.self != EmptyView.self }
+
+    var body: some View {
+        // One TextField, always in the same place in the hierarchy: moving
+        // it between branches re-creates it, which drops and re-acquires
+        // focus in a loop.
+        VStack(alignment: .leading, spacing: 8) {
+            if expanded {
+                dragHandle
+                    .transition(.opacity)
+            }
+
+            if expanded, hasControls {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) { controls() }
+                        .padding(.horizontal, 12)
+                }
+                .padding(.top, -4)
+                .transition(.opacity)
+            }
+
+            HStack(spacing: 8) {
+                field
+                    .padding(.vertical, expanded ? 4 : 8)
+                if !expanded {
+                    trailingButton
+                        .transition(.opacity)
+                }
+            }
+            .padding(.leading, expanded ? 16 : 18)
+            .padding(.trailing, expanded ? 16 : 6)
+            .padding(.top, expanded ? 0 : 4)
+            .padding(.bottom, expanded ? 0 : 4)
+
+            if expanded, !attachments.isEmpty {
+                attachmentStrip
+                    .transition(.opacity)
+            }
+
+            if expanded {
+                HStack(spacing: 8) {
+                    attachMenu
+                    Spacer(minLength: 0)
+                    trailingButton
+                }
+                .padding(.horizontal, 6)
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
+        }
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .animation(.snappy(duration: 0.28), value: expanded)
+        .animation(.snappy(duration: 0.25), value: attachments)
+        .animation(.easeOut(duration: 0.15), value: hasText)
+        .animation(.easeOut(duration: 0.15), value: isStreaming)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .offset(y: handleDrag)
+        .onChange(of: focused) { _, isFocused in if isFocused { collapsedByUser = false } }
+        .photosPicker(isPresented: $showPhotos, selection: $photoItems, maxSelectionCount: 6, matching: .images)
+        .onChange(of: photoItems) { _, items in
+            guard !items.isEmpty else { return }
+            photoItems = []
+            Task {
+                for item in items {
+                    if let attachment = await ComposerAttachment.load(item) { attachments.append(attachment) }
+                }
+            }
+        }
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result {
+                attachments.append(contentsOf: urls.compactMap(ComposerAttachment.load(fileURL:)))
+            }
+        }
+        #if DEBUG
+        .onAppear {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("-focus-composer") { focused = true }
+            if args.contains("-preview-attachments"), attachments.isEmpty { attachments = Self.previewAttachments() }
+            if args.contains("-open-photos") { present { showPhotos = true } }
+            if args.contains("-open-files") { present { showFiles = true } }
+        }
+        #endif
+    }
+
+    #if DEBUG
+    private static func previewAttachments() -> [ComposerAttachment] {
+        var result: [ComposerAttachment] = []
+        #if canImport(UIKit)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 200, height: 200)).image { ctx in
+            UIColor.systemTeal.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+            UIColor.white.setFill(); ctx.fill(CGRect(x: 50, y: 50, width: 100, height: 100))
+        }
+        if let jpeg = image.jpegData(compressionQuality: 0.8) { result.append(ComposerAttachment(name: "Photo", kind: .image(jpeg))) }
+        #endif
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("deploy-notes.pdf")
+        try? Data("x".utf8).write(to: url)
+        result.append(ComposerAttachment(name: "deploy-notes.pdf", kind: .file(url)))
+        return result
+    }
+    #endif
+
+    // MARK: Pieces
+
+    /// Tap or pull down to put the keyboard away and fold the composer.
+    /// The drag is free-form: nothing changes until the finger lifts.
+    private var dragHandle: some View {
+        Capsule()
+            .fill(Theme.muted.opacity(0.6))
+            .frame(width: 36, height: 5)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .contentShape(Rectangle())
+            .onTapGesture { collapse() }
+            .gesture(
+                // Global space: the composer itself moves with the finger,
+                // so a local-space translation would jitter.
+                DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                    .onChanged { value in
+                        handleDrag = max(0, value.translation.height)
+                    }
+                    .onEnded { value in
+                        let shouldClose = value.translation.height > 40 || value.predictedEndTranslation.height > 120
+                        withAnimation(.snappy(duration: 0.25)) { handleDrag = 0 }
+                        if shouldClose { collapse() }
+                    }
+            )
+            .accessibilityLabel("Collapse composer")
+            .accessibilityAddTraits(.isButton)
+    }
+
+    private func present(_ change: @escaping () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            change()
+        }
+    }
+
+    private func collapse() {
+        focused = false
+        collapsedByUser = true
+    }
+
+    private var field: some View {
+        TextField(isStreaming ? (sendsDuringTurn ? "Send a message…" : "Queue a message…") : "Ask Nuphos anything…", text: $text, axis: .vertical)
+            .lineLimit(1...8)
+            .font(.body)
+            .foregroundStyle(Theme.heading)
+            .focused($focused)
+            .submitLabel(.send)
+            .onSubmit(send)
+    }
+
+    private var attachmentStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { attachment in
+                    AttachmentTile(attachment: attachment) {
+                        attachments.removeAll { $0.id == attachment.id }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private var attachMenu: some View {
+        Menu {
+            // Presenting while the menu is still dismissing gets dropped;
+            // let it finish first.
+            Button { present { showPhotos = true } } label: { Label("Photos", systemImage: "photo.on.rectangle") }
+            Button { present { showFiles = true } } label: { Label("Files", systemImage: "folder") }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .medium))
+                .frame(width: 34, height: 34)
+                .foregroundStyle(Theme.body)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Attach")
+    }
+
+    /// One button, never two: a running turn with nothing typed stops it,
+    /// and what is typed goes into that turn where the runtime takes it,
+    /// otherwise into the queue.
+    private var action: ComposerAction {
+        .current(
+            isStreaming: isStreaming,
+            hasPayload: hasPayload,
+            canSteer: canSteer && canSend,
+            sendsDuringTurn: sendsDuringTurn,
+            canStop: canStop && onStop != nil
+        )
+    }
+
+    private var trailingButton: some View {
+        let action = action
+        return Button {
+            if action == .stop { onStop?() } else { send() }
+        } label: {
+            Image(systemName: action.systemImage)
+                .font(Theme.Text.secondary.weight(.bold))
+                .frame(width: 34, height: 34)
+                .foregroundStyle(Theme.chatCanvas)
+                .background(filled ? Theme.heading : Theme.muted.opacity(0.6), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .contentTransition(.symbolEffect(.replace))
+        .disabled(action != .stop && (!canSend || !hasPayload || (!allowsAttachments && !attachments.isEmpty)))
+        .accessibilityLabel(action.accessibilityLabel)
+    }
+
+    /// The button reads as active when it will do something: stop a turn, or
+    /// take what has been typed.
+    private var filled: Bool { action == .stop || hasPayload }
+
+    private func send() {
+        guard canSend, hasPayload, allowsAttachments || attachments.isEmpty else { return }
+        let submission = ComposerSubmission(text: text.trimmingCharacters(in: .whitespacesAndNewlines), attachments: attachments)
+        text = ""
+        attachments = []
+        focused = false
+        onSend(submission)
+    }
+}
+
+extension ChatComposerBar where Controls == EmptyView {
+    /// A composer with no control row.
+    init(text: Binding<String>, isStreaming: Bool = false, canSteer: Bool = false, onSend: @escaping (ComposerSubmission) -> Void, onStop: (() -> Void)? = nil) {
+        self.init(text: text, isStreaming: isStreaming, canSteer: canSteer, onSend: onSend, onStop: onStop, controls: { EmptyView() })
+    }
+}
+
+/// A small pill control for the composer's top row.
+struct ComposerChip: View {
+    var systemImage: String? = nil
+    /// An asset-catalog mark (`Logos/`) instead of a symbol.
+    var logo: String? = nil
+    let title: String
+    var isActive = false
+    var showsChevron = true
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let logo {
+                BrandLogo(name: logo, size: 13)
+            } else if let systemImage {
+                Image(systemName: systemImage).font(.system(size: 11, weight: .semibold))
+            }
+            Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.muted)
+            }
+        }
+        .foregroundStyle(isActive ? Theme.heading : Theme.body)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Theme.bubble.opacity(isActive ? 1 : 0.7), in: Capsule())
+    }
+}
+
+/// A brand mark from the asset catalog, sized like an inline symbol.
+/// Monochrome marks are template images and take the foreground colour.
+struct BrandLogo: View {
+    let name: String
+    var size: CGFloat = 16
+
+    var body: some View {
+        Image(name)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+    }
+}
+
+#Preview {
+    @Previewable @State var text = ""
+    ZStack(alignment: .bottom) {
+        Theme.canvas.ignoresSafeArea()
+        ChatComposerBar(text: $text, onSend: { _ in }) {
+            ComposerChip(systemImage: "key", title: "IAM")
+            ComposerChip(systemImage: "checkmark.shield", title: "Auto Mode")
+        }
+    }
+}
