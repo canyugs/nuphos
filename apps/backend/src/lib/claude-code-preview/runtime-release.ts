@@ -43,7 +43,7 @@ async function fetchRelease(): Promise<RuntimeRelease | null> {
 
   for (let page = 1; ; page++) {
     const response = await fetch(
-      `https://api.github.com/repos/nuphos/nuphos/releases?per_page=100&page=${page}`,
+      `https://api.github.com/repos/nuphos/nuphos/releases?per_page=100&page=${String(page)}`,
       { headers, signal },
     )
 

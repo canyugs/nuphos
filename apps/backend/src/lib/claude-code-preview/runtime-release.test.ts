@@ -21,7 +21,7 @@ test('runtime discovery skips other components, follows pages and preserves the 
   let responses: Response[] = []
 
   globalThis.fetch = (async (url: string | URL | Request) => {
-    requests.push(String(url))
+    requests.push(url instanceof Request ? url.url : String(url))
     const response = responses.shift()
 
     if (!response) throw new Error('Unexpected request')
