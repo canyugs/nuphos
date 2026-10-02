@@ -1,11 +1,18 @@
-import { beforeEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
+
+import { useAgentDb } from '@/lib/test/doubles/agent-db'
+import { useRuntimeCatalog } from '@/lib/test/doubles/runtime-catalog'
+import { useRuntimeRegistry } from '@/lib/test/doubles/runtime-registry'
+
+import { controlRegistry } from './agent-chat-registry'
+import { readRuntimeFile, parseRuntimeFile } from './runtime-file'
 
 let conversation: Record<string, unknown> | null
 let calls = 0
 const endpoint = { runtimeId: 'r', url: 'wss://agent.test/acp', authKey: 'fixture' }
 
-await mock.module('@/lib/agent/db', () => ({ getReadableConversation: async () => conversation }))
-await mock.module('./runtime-catalog', () => ({
+useAgentDb({ getReadableConversation: async () => conversation })
+useRuntimeCatalog({
   requireRuntimeInstance: async () => ({
     id: 'r',
     provider: 'codex',
@@ -13,26 +20,31 @@ await mock.module('./runtime-catalog', () => ({
     kind: 'external',
   }),
   developmentRuntimeEndpoint: () => undefined,
-}))
-await mock.module('./runtime-registry', () => ({
-  resolveTeamRuntimeEndpoints: async () => [endpoint],
-}))
-await mock.module('./agent-chat-registry', () => ({
-  controlRegistry: {
-    acquire: async () => ({
-      runJob: async (request: { stdin: string }) => {
-        calls++
-        expect(JSON.parse(request.stdin).params).toEqual({ sessionId: 's', path: 'report.md' })
+})
+useRuntimeRegistry({ resolveTeamRuntimeEndpoints: async () => [endpoint] })
+let restore = () => {}
 
-        return { stdout: JSON.stringify({ name: 'report.md', data: 'aGk=', size: 2 }) }
-      },
-    }),
-    runtimeJobs: () => ['panel'],
-  },
-}))
-const { readRuntimeFile, parseRuntimeFile } = await import('./runtime-file')
+afterEach(() => restore())
 
 beforeEach(() => {
+  const acquire = spyOn(controlRegistry, 'acquire').mockResolvedValue({
+    runJob: async (request: { stdin: string }) => {
+      calls++
+      expect(JSON.parse(request.stdin).params).toEqual({
+        sessionId: 's',
+        path: 'report.md',
+        workspace: '/workspace',
+      })
+
+      return { stdout: JSON.stringify({ name: 'report.md', data: 'aGk=', size: 2 }) }
+    },
+  } as unknown as Awaited<ReturnType<typeof controlRegistry.acquire>>)
+  const jobs = spyOn(controlRegistry, 'runtimeJobs').mockReturnValue(['panel'])
+
+  restore = () => {
+    acquire.mockRestore()
+    jobs.mockRestore()
+  }
   calls = 0
   conversation = { sessionId: 's', userId: 'owner', teamId: 'team', runtimeId: 'r' }
 })

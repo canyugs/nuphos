@@ -32,10 +32,17 @@ export class LocalFileStream implements SocketLike {
   send(input: string): void {
     if (this.readyState !== 1 || this.child) return
     if (input.length > 16384) return this.close()
+    let request: { sessionId?: unknown; path?: unknown }
+
+    try {
+      request = JSON.parse(input)
+      if (!request || typeof request !== 'object') return this.close()
+    } catch {
+      return this.close()
+    }
     const child = spawn(process.execPath, ['--input-type=module', '-e', RUNTIME_FILE_PROGRAM], {
       env: {
         ELECTRON_RUN_AS_NODE: '1',
-        NUPHOS_RUNTIME_WORKSPACE: this.workspace,
         SystemRoot: process.env.SystemRoot,
       },
       stdio: ['pipe', 'pipe', 'ignore'],
@@ -57,7 +64,13 @@ export class LocalFileStream implements SocketLike {
       this.emit('message', { data: output })
       this.close()
     })
-    child.stdin.end(input)
+    child.stdin.end(
+      JSON.stringify({
+        sessionId: request.sessionId,
+        path: request.path,
+        workspace: this.workspace,
+      }),
+    )
   }
 
   close(): void {

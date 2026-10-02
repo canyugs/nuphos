@@ -18,8 +18,8 @@ try {
         process.stdin.on('error', reject);
       }));
   if (!/^[A-Za-z0-9_-]{1,200}$/.test(input.sessionId) || typeof input.path !== 'string' || input.path.length > 4096 || input.path.includes('\0')) throw Error('invalid_path');
-  const base = process.env.NUPHOS_RUNTIME_WORKSPACE || '/workspace';
-  const workspace = base;
+  const workspace = input.workspace;
+  if (typeof workspace !== 'string' || !path.isAbsolute(workspace)) throw Error('invalid_path');
   if ((await fs.lstat(workspace)).isSymbolicLink()) throw Error('forbidden_path');
   const root = await fs.realpath(workspace);
   // Accept both the adapter's virtual /workspace path and the real local path.

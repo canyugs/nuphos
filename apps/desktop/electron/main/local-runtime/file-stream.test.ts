@@ -17,12 +17,12 @@ async function fixture(run: (root: string) => Promise<void>) {
   }
 }
 
-async function read(root: string, path: string) {
+async function read(root: string, path: string, workspace?: string) {
   const stream = new LocalFileStream(root)
 
   return await new Promise<Record<string, unknown>>((resolve, reject) => {
     stream.addEventListener('open', () =>
-      stream.send(JSON.stringify({ sessionId: 'session', path })),
+      stream.send(JSON.stringify({ sessionId: 'session', path, workspace })),
     )
     stream.addEventListener('message', ({ data }) => resolve(JSON.parse(String(data))))
     stream.addEventListener('close', () => reject(new Error('closed without a result')))
@@ -59,4 +59,10 @@ test('refuses a workspace root replaced with a symlink', () =>
     await writeFile(join(root, 'other/file'), 'private')
     await symlink(join(root, 'other'), join(root, 'conv-session'))
     assert.equal((await read(join(root, 'conv-session'), 'file')).error, 'forbidden_path')
+  }))
+
+test('ignores a caller-supplied workspace outside the local runtime', () =>
+  fixture(async (root) => {
+    await writeFile(join(root, 'secret'), 'private')
+    assert.equal((await read(join(root, 'conv-session'), 'secret', root)).error, 'file_not_found')
   }))

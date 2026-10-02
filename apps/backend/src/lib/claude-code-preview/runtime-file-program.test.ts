@@ -16,11 +16,11 @@ test('the cloud panel runner reads JSON params and returns exact binary bytes', 
     await writeFile(join(root, 'runner.mjs'), RUNTIME_FILE_PROGRAM)
     await writeFile(
       join(root, 'params.json'),
-      JSON.stringify({ sessionId: 's', path: 'image.bin' }),
+      JSON.stringify({ sessionId: 's', path: 'image.bin', workspace: root }),
     )
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- Executes the fixture with the installed Node interpreter, without a shell.
     const output = execFileSync('node', [join(root, 'runner.mjs'), root], {
-      env: { PATH: process.env.PATH, NUPHOS_RUNTIME_WORKSPACE: root },
+      env: { PATH: process.env.PATH },
       encoding: 'utf8',
       timeout: 5000,
     })
