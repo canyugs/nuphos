@@ -15,6 +15,7 @@ import {
   listInstallationRepositories,
 } from '@/lib/byos/github'
 import { AppError } from '@/lib/errors'
+import { getNuphosUserById } from '@/lib/identity'
 import { parseObjectId } from '@/lib/objectid'
 import { zv } from '@/lib/validate'
 import { requireTeamRole, requireGithubInstallation } from '@/middleware/auth'
@@ -222,6 +223,8 @@ installationScoped.get('/token', requireTeamRole('ADMINISTRATOR', 'EDITOR'), asy
     )
 
     const { appSlug } = await getInstallation(installationId)
+    // Conversation auth sets userId to the current actor, not the runtime owner.
+    const actor = await getNuphosUserById(c.get('userId'))
 
     c.header('X-Credentials-Expires-At', expiresAt.toISOString())
 
@@ -229,6 +232,7 @@ installationScoped.get('/token', requireTeamRole('ADMINISTRATOR', 'EDITOR'), asy
       token,
       expiresAt: expiresAt.toISOString(),
       appSlug,
+      commitAuthor: actor ? { name: actor.name, email: actor.email } : null,
       installationId,
       accountLogin: c.get('githubAccountLogin'),
     })

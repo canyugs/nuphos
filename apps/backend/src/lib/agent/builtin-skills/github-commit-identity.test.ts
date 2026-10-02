@@ -8,7 +8,7 @@ import { expect, test } from 'bun:test'
 
 const setup = join(import.meta.dir, 'skills/github/scripts/setup-credentials.sh')
 
-test('self-hosted App identity reaches real commits without changing global or other repo authors', () => {
+test('current actor authors and self-hosted App committers stay repository-local', () => {
   const root = mkdtempSync(join(tmpdir(), 'github-identity-'))
   const bin = join(root, 'bin')
   const repo = join(root, 'repo')
@@ -24,6 +24,8 @@ test('self-hosted App identity reaches real commits without changing global or o
     NUPHOS_BACKEND_URL: 'https://fixture.invalid',
     TEST_APP_SLUG: 'customer-automation',
     TEST_BOT_TYPE: 'Bot',
+    TEST_AUTHOR_NAME: 'Current Teammate',
+    TEST_AUTHOR_EMAIL: 'teammate@example.invalid',
   }
   const git = (cwd: string, ...args: string[]) =>
     execFileSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8', stdio: 'pipe' }).trim()
@@ -44,7 +46,7 @@ test('self-hosted App identity reaches real commits without changing global or o
       join(bin, 'curl'),
       `#!/usr/bin/env python3
 import json, os
-print(json.dumps(dict(token='fixture', accountLogin='different-org', appSlug=os.environ['TEST_APP_SLUG'])))
+print(json.dumps(dict(token='fixture', accountLogin='different-org', appSlug=os.environ['TEST_APP_SLUG'], commitAuthor=dict(name=os.environ['TEST_AUTHOR_NAME'], email=os.environ['TEST_AUTHOR_EMAIL']))))
 `,
       { mode: 0o755 },
     )
@@ -66,21 +68,32 @@ else:
     run()
     git(repo, 'commit', '--allow-empty', '-m', 'identity test')
     expect(git(repo, 'log', '-1', '--format=%an <%ae>|%cn <%ce>')).toBe(
-      'customer-automation[bot] <7654321+customer-automation[bot]@users.noreply.github.com>|customer-automation[bot] <7654321+customer-automation[bot]@users.noreply.github.com>',
+      'Current Teammate <teammate@example.invalid>|customer-automation[bot] <7654321+customer-automation[bot]@users.noreply.github.com>',
     )
     expect(git(other, 'config', 'user.email')).toBe('human@example.invalid')
     expect(readFileSync(globalConfig, 'utf8')).toBe(original)
 
     env.TEST_APP_SLUG = 'second-app'
+    env.TEST_AUTHOR_NAME = 'Next Teammate'
+    env.TEST_AUTHOR_EMAIL = 'next@example.invalid'
     run()
-    expect(git(repo, 'config', '--local', 'user.email')).toBe(
+    expect(git(repo, 'config', '--local', 'committer.email')).toBe(
       '7654321+second-app[bot]@users.noreply.github.com',
     )
+    expect(git(repo, 'var', 'GIT_AUTHOR_IDENT')).toStartWith('Next Teammate <next@example.invalid>')
     const beforeFailure = readFileSync(join(repo, '.git/config'), 'utf8')
 
     env.TEST_BOT_TYPE = 'User'
     expect(run).toThrow()
     expect(readFileSync(join(repo, '.git/config'), 'utf8')).toBe(beforeFailure)
+    env.TEST_BOT_TYPE = 'Bot'
+    env.TEST_AUTHOR_EMAIL = ''
+    expect(run).toThrow()
+    expect(readFileSync(join(repo, '.git/config'), 'utf8')).toBe(beforeFailure)
+    env.TEST_AUTHOR_EMAIL = 'next@example.invalid\nInjected'
+    expect(run).toThrow()
+    expect(readFileSync(join(repo, '.git/config'), 'utf8')).toBe(beforeFailure)
+    env.TEST_AUTHOR_EMAIL = 'next@example.invalid'
     env.TEST_APP_SLUG = ''
     expect(run).toThrow()
     expect(readFileSync(join(repo, '.git/config'), 'utf8')).toBe(beforeFailure)

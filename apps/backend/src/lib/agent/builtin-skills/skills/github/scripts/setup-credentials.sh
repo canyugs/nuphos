@@ -13,7 +13,7 @@ Usage: setup-credentials.sh <teamId> <installationId> [repoDir]
   installationId  Numeric GitHub App installation id (from
                   GET /teams/<teamId>/github-installations)
 
-  repoDir         Optional. Configure this repository's commit identity as the App bot.
+  repoDir         Optional. Configure this repository's human author and App bot committer.
 
 Environment:
   GH_CONFIG_DIR     Optional. Defaults to \$XDG_CONFIG_HOME/gh or \$HOME/.config/gh.
@@ -126,6 +126,17 @@ if not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9-]+", slug):
     sys.exit("Missing or invalid appSlug from backend; cannot configure commit identity")
 print(slug)
 ')"
+  author_identity="$(printf '%s' "$token_response" | python3 -c '
+import json, re, sys
+author = json.load(sys.stdin).get("commitAuthor") or {}
+name, email = author.get("name"), author.get("email")
+if not isinstance(name, str) or not name.strip() or re.search(r"[\x00-\x1f\x7f<>]", name):
+    sys.exit("Missing or invalid Nuphos actor name; cannot configure commit author")
+if not isinstance(email, str) or not re.fullmatch(r"[^\s<>@\x00-\x1f\x7f]+@[^\s<>@\x00-\x1f\x7f]+", email):
+    sys.exit("Missing or invalid Nuphos actor email; cannot configure commit author")
+print(name.strip())
+print(email)
+')"
   bot_json="$(gh api --hostname github.com "users/${app_slug}[bot]")"
   bot_identity="$(printf '%s' "$bot_json" | python3 -c '
 import json, sys
@@ -138,7 +149,12 @@ print(f"{user_id}+{login}@users.noreply.github.com")
 ' "${app_slug}[bot]")"
   bot_name="${bot_identity%%$'\n'*}"
   bot_email="${bot_identity#*$'\n'}"
-  git -C "$repo_dir" config --local user.name "$bot_name"
-  git -C "$repo_dir" config --local user.email "$bot_email"
-  echo "Repository commit identity: $bot_name <$bot_email>"
+  author_name="${author_identity%%$'\n'*}"
+  author_email="${author_identity#*$'\n'}"
+  git -C "$repo_dir" config --local author.name "$author_name"
+  git -C "$repo_dir" config --local author.email "$author_email"
+  git -C "$repo_dir" config --local committer.name "$bot_name"
+  git -C "$repo_dir" config --local committer.email "$bot_email"
+  echo "Repository author: $author_name <$author_email>"
+  echo "Repository committer: $bot_name <$bot_email>"
 fi
