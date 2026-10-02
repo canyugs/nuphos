@@ -154,6 +154,7 @@ test('file links pin the source runtime and conversation in server-provided cont
     locale: 'en',
     runtimeId: 'local:user:device:codex',
   })
+
   expect(prompt).toContain(
     'https://nuphos.ai/teams/team-1/agent-runtimes/local%3Auser%3Adevice%3Acodex/files/content?sessionId=conv-1&path=',
   )

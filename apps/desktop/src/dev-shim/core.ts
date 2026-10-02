@@ -36,7 +36,7 @@ export function coreMethods(): Record<string, any> {
     atlasGetRuntimeModels: (teamId: string, runtimeId: string, model?: string) =>
       call(
         'GET',
-        `/teams/${teamId}/agent-runtimes/${runtimeId}/models${model ? `?model=${encodeURIComponent(model)}` : ''}`,
+        `/teams/${teamId}/agent-runtimes/${runtimeId}/models${model ? '?model=' + encodeURIComponent(model) : ''}`,
       ),
     atlasGetRuntimeInstanceStatus: (teamId: string, runtimeId: string) =>
       call('GET', `/teams/${teamId}/agent-runtimes/${runtimeId}/status`),
