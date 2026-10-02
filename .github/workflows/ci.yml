@@ -1,0 +1,332 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'scripts/dev*.ts'
+      - 'scripts/check-lint-config-integrity.mjs'
+      - 'scripts/check-lint-config-integrity.test.mjs'
+      - 'scripts/check-import-cycles.mjs'
+      - 'scripts/check-import-cycles.test.mjs'
+      - 'scripts/import-cycles.baseline.json'
+      - '.github/workflows/**'
+      # Root tooling. Without these, a change to the Prettier config or the
+      # root lockfile would trigger no CI at all.
+      - 'package.json'
+      - 'bun.lock'
+      - '.prettierrc.json'
+      - '.prettierignore'
+      - 'eslint.config.mjs'
+      - 'eslint-rules/**'
+      - '.claude/hooks/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  format:
+    name: Format (prettier --check)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Check formatting
+        run: bun run format:check
+
+  changes:
+    name: Detect changed apps
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      ios: ${{ steps.filter.outputs.ios }}
+      dev_scripts: ${{ steps.filter.outputs.dev_scripts }}
+      lint_config: ${{ steps.filter.outputs.lint_config }}
+      import_cycles: ${{ steps.filter.outputs.import_cycles }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/backend/**'
+              - '.github/workflows/ci.yml'
+            desktop:
+              - 'apps/desktop/**'
+              - '.github/workflows/ci.yml'
+            ios:
+              - 'apps/ios/**'
+              - '.github/workflows/ci.yml'
+            dev_scripts:
+              - 'scripts/**'
+              - 'eslint.config.mjs'
+              - 'eslint-rules/**'
+              - '.claude/hooks/**'
+              - '.github/workflows/ci.yml'
+            lint_config:
+              - 'eslint.config.mjs'
+              - 'eslint-rules/**'
+              - 'apps/*/eslint.config.*'
+              - 'scripts/check-lint-config-integrity.mjs'
+              - 'scripts/check-lint-config-integrity.test.mjs'
+              # A plugin bump is how a live rule turns into a deprecated stub.
+              - 'package.json'
+              - 'bun.lock'
+              - 'apps/*/package.json'
+              - 'apps/*/bun.lock'
+              - 'apps/desktop/pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
+            import_cycles:
+              - 'apps/backend/src/**'
+              - 'apps/desktop/src/**'
+              - 'apps/desktop/electron/**'
+              - 'apps/*/tsconfig*.json'
+              - 'scripts/check-import-cycles.mjs'
+              - 'scripts/check-import-cycles.test.mjs'
+              - 'scripts/import-cycles.baseline.json'
+              - '.github/workflows/ci.yml'
+
+  ios:
+    name: iOS (simulator build)
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test runtime observations
+        run: bash apps/ios/tests/run.sh
+      - name: Build for iOS Simulator
+        working-directory: apps/ios
+        run: |
+          set -euo pipefail
+          xcodebuild -project nuphos-ios.xcodeproj -scheme nuphos-ios -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -40
+
+  backend:
+    name: Backend (typecheck + test + docker build)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # ESLint's plugin set needs `Set.prototype.union` (Node 22+). Without an
+      # explicit toolchain the lint step falls back to the runner image's Node
+      # and dies loading the config.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      - name: Install dependencies
+        working-directory: apps/backend
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        working-directory: apps/backend
+        # tsc needs between 2 and 3 GB on this project; node's default heap on
+        # this runner is ~2 GB, so it OOMs (exit 134) with no type error to show.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: bun run typecheck
+      - name: Lint
+        working-directory: apps/backend
+        # BLOCKING. Errors are at zero here; warnings do not fail the run.
+        # Type-aware linting builds the same program `tsc --noEmit` does, so it
+        # needs the same heap bump (see the Typecheck step above).
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: bun run lint
+      - name: Unit tests
+        working-directory: apps/backend
+        # `mock.module` registrations are process-wide, so two suites mocking the
+        # same module can answer each other's code: a turn one suite starts is
+        # recorded into another's array and the first sees nothing. It only ever
+        # reproduces on this runner, and both in-test remedies were tried and
+        # reshuffled the failures rather than fixing them.
+        #
+        # Until the code under test takes its collaborators by injection, every
+        # suite that mocks a contended module gets its own process. The set is
+        # DERIVED, not hand-kept: a new suite that mocks one of these is isolated
+        # automatically, which is what the previous hard-coded list could not do —
+        # it let a new file silently join the shared process and break an
+        # unrelated suite.
+        run: |
+          CONTENDED='@/routes/agent|@/lib/identity|@/lib/agent/db|@/models|@/lib/slack/api|@/lib/slack/agent-bot|@/middleware/auth'
+          isolated=$(grep -rlE "mock\.module\('($CONTENDED)'" src --include='*.test.ts' | sort)
+          shared=$(find src -name '*.test.ts' | sort | comm -23 - <(echo "$isolated"))
+          echo "isolated suites:"; echo "$isolated" | sed 's/^/  /'
+          bun test $shared
+          for suite in $isolated; do
+            echo "::group::$suite"
+            bun test "$suite"
+            echo "::endgroup::"
+          done
+      - name: Check API schema is up-to-date
+        working-directory: apps/backend
+        run: bun run check:api
+      - name: Build backend image (no push)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: apps/backend/Dockerfile
+          push: false
+          load: false
+          provenance: false
+
+  desktop:
+    name: Desktop (Nuphos macOS package)
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        # electron:build goes through vite/esbuild, which strips types without
+        # checking them — #616 shipped three type errors to main this way,
+        # including two unregistered analytics events that would have silently
+        # dropped telemetry.
+        working-directory: apps/desktop
+        run: pnpm typecheck
+      - name: Lint
+        working-directory: apps/desktop
+        # BLOCKING. Errors are at zero here; warnings do not fail the run. Runs
+        # type-aware rules, so it needs the same heap headroom as the typecheck
+        # above.
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm lint
+      - name: Run tests
+        working-directory: apps/desktop
+        run: pnpm test
+      - name: Stage the local agent adapter
+        working-directory: apps/desktop
+        run: node local-runtime/prepare.mjs --targets darwin-arm64,darwin-x64 --no-openab
+      - name: Package Nuphos macOS app
+        working-directory: apps/desktop
+        run: pnpm run electron:build --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  dev-scripts:
+    name: Dev scripts
+    needs: changes
+    if: needs.changes.outputs.dev_scripts == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint scripts/
+        # BLOCKING. Errors are at zero here; warnings do not fail the run.
+        run: bun run lint
+      - name: Test the dev launcher's local stack wiring
+        run: node --test --experimental-strip-types scripts/dev*.test.ts
+      # BLOCKING. The custom comment-discipline rules are only worth having if
+      # they still fire; a rule that silently stops reporting is worse than no
+      # rule. These suites fail if any of the three does.
+      - name: Test custom ESLint rules
+        run: node --test eslint-rules/*.test.mjs
+      # BLOCKING, for the same reason. The PreToolUse hook is what stops an
+      # agent editing its way out of a rule; nothing else notices when its
+      # path patterns stop matching.
+      - name: Test the lint-config write guard
+        run: bash .claude/hooks/guard-lint-config.test.sh
+
+  lint-config-integrity:
+    name: Lint config integrity
+    needs: changes
+    if: needs.changes.outputs.lint_config == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      # Every config is loaded for real, so every config's plugins must be on
+      # disk. Nothing is built or typechecked here — installs are the whole cost.
+      - name: Install root dependencies
+        run: bun install --frozen-lockfile
+      - name: Install backend dependencies
+        working-directory: apps/backend
+        run: bun install --frozen-lockfile
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+      - name: Test the integrity checker
+        run: node --test scripts/check-lint-config-integrity.test.mjs
+      # BLOCKING. A rule that resolves to severity 0, or whose implementation is
+      # a deprecated stub, reads as enforced in the config and enforces nothing.
+      - name: Check lint config integrity
+        run: node scripts/check-lint-config-integrity.mjs
+
+  import-cycles:
+    name: Import cycles
+    needs: changes
+    if: needs.changes.outputs.import_cycles == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      # madge parses the sources itself, so only the root toolchain is needed —
+      # no app install, no type program. The whole job is a few seconds.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Test the cycle checker
+        run: node --test scripts/check-import-cycles.test.mjs
+      # BLOCKING as a ratchet: the cycles already here are recorded and allowed,
+      # a new one fails. Nothing else in this repo detects them — `import-x/no-cycle`
+      # never fired on a `.ts` file.
+      - name: Check import cycles
+        run: bun run check:cycles

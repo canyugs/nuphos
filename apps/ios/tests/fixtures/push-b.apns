@@ -1,0 +1,11 @@
+{
+  "aps": {
+    "alert": {
+      "title": "Preview push B",
+      "body": "Tap to open chat"
+    },
+    "sound": "default"
+  },
+  "teamId": "64b5f1c2e4b0a1d2c3e4f5a6",
+  "sessionId": "push-b"
+}
