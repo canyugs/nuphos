@@ -19,12 +19,16 @@ const MEMBER: NuphosTeamMember = {
   joinedAt: '2026-10-02T00:00:00.000Z',
 }
 const REMOVED = { ...MEMBER, id: 'removed-1', removedAt: '2026-10-02T01:00:00.000Z' }
+const REJOINED_TOMBSTONE = { ...REMOVED, id: MEMBER.id, role: 'EDITOR' as const }
+const EARLIER_REMOVED = { ...REMOVED, role: 'ADMINISTRATOR' as const }
 
 useIdentity({
   getTeamMembers: (teamId, opts) => {
     if (teamId !== 'team-1') return Promise.resolve([])
 
-    return Promise.resolve(opts?.includeRemoved ? [MEMBER, REMOVED] : [MEMBER])
+    return Promise.resolve(
+      opts?.includeRemoved ? [REJOINED_TOMBSTONE, MEMBER, EARLIER_REMOVED, REMOVED] : [MEMBER],
+    )
   },
 })
 
@@ -46,6 +50,13 @@ function createApp(teamId = 'team-1') {
 describe('GET /members/:memberId', () => {
   test('returns the member from the current team', async () => {
     const response = await createApp().request('/members/member-1')
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ member: MEMBER })
+  })
+
+  test('prefers the active membership after a rejoin even when removed rows are included', async () => {
+    const response = await createApp().request('/members/member-1?includeRemoved=true')
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ member: MEMBER })
