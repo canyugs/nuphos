@@ -5,7 +5,7 @@ import { answerPermissionRequest } from './openab-acp-permission.ts'
 import {
   ACP_INITIALIZE_PARAMS,
   acceptRuntimePrompt,
-  promptMeta,
+  imagePromptParams,
   resumeSessionAlive,
   sessionMeta,
 } from './openab-acp-session.ts'
@@ -15,6 +15,7 @@ import { observeOpenAbSessionUpdates, routeOpenAbSessionUpdate } from './openab-
 import type { OpenAbAcpConnection } from './openab-acp-connect.ts'
 import type {
   AcpHttpMcpServer,
+  AcpImageContent,
   AcpSocket,
   OpenAbAcpClientOptions,
   OpenAbPermissionHandler,
@@ -29,7 +30,6 @@ import type { PreviewAgentUpdate } from './preview-agent-update.ts'
 export type { AcpHttpMcpServer, OpenAbAcpClientOptions } from './openab-acp-session.ts'
 export type { OpenAbSessionUpdate } from './openab-acp-updates.ts'
 export type { PreviewAgentUpdate } from './preview-agent-update.ts'
-
 type SocketEvent = { code?: number; data?: unknown; message?: string; reason?: string }
 type JsonRpcResult = Record<string, unknown>
 
@@ -126,12 +126,13 @@ export class OpenAbAcpClient extends OpenAbAcpLifecycle {
     onPermissionRequest?: OpenAbPermissionHandler,
     onAccepted?: () => void,
     context?: PromptSessionContext,
+    images: AcpImageContent[] = [],
   ): Promise<JsonRpcResult> {
     this.cancelledSessions.delete(sessionId)
 
     return this.call(
       'session/prompt',
-      { sessionId, prompt: [{ type: 'text', text }], ...promptMeta(Boolean(onAccepted), context) },
+      imagePromptParams(sessionId, text, images, Boolean(onAccepted), context),
       {
         sessionId,
         onTextDelta,
@@ -176,7 +177,6 @@ export class OpenAbAcpClient extends OpenAbAcpLifecycle {
         reject(timer.timeoutError(method))
         if (context.sessionId && owned) {
           this.cancel(context.sessionId)
-          // A stall still had live frames; only silence implicates the shared socket.
           if (!timer.stalled()) this.retireTransport()
         } else if (closeOnTimeout) this.closeSocket()
       }

@@ -26,6 +26,7 @@ import {
 } from './team-openab-runtime'
 
 import type { AcpHttpMcpServer, PreviewAgentUpdate } from './openab-acp-client'
+import type { AcpImageContent } from './openab-acp-session'
 import type { OpenAbPermissionHandler, OpenAbSessionRuntime } from './openab-acp-session'
 import type { TeamRuntimeEndpoint, TeamSession } from './team-openab-runtime'
 
@@ -142,6 +143,7 @@ export async function runClaudeCodePreviewPrompt(args: {
   conversationOwnerUserId?: string
   locale: string
   message: string
+  images?: AcpImageContent[]
   endpoint: TeamRuntimeEndpoint
   mcpServers?: AcpHttpMcpServer[]
   /** Nuphos context appended to Claude Code's system prompt (session-scoped). */
@@ -285,6 +287,7 @@ export async function runClaudeCodePreviewPrompt(args: {
         if (activeTurn.cancelled) client.cancel(session.openabSessionId)
       },
       nextContext,
+      args.images,
     )
 
     return { stopReason: await settledCodexStopReason(session, result, text.last()) }

@@ -10,6 +10,7 @@ import { turnInputMessages } from './turn-start-frame'
 import type { PreviewChatTurnArgs } from './chat-preview-turn'
 import type { AgentChatBody } from './types'
 import type { PendingUserMessage } from '@/lib/agent/pending-messages'
+import type { AcpImageContent } from '@/lib/claude-code-preview/openab-acp-session'
 import type { PreviewTurnMemory } from '@/lib/claude-code-preview/preview-recall'
 import type { UIMessage } from 'ai'
 
@@ -42,6 +43,21 @@ export function lastUserMessageText(messages: UIMessage[]): string {
   }
 
   return ''
+}
+
+/** Only the current input images belong to this prompt, never prior-turn history. */
+export function inputImages(messages: UIMessage[]): AcpImageContent[] {
+  return messages.flatMap((message) =>
+    message.parts.flatMap((part) => {
+      if (part.type !== 'file' || !part.mediaType.startsWith('image/')) return []
+
+      const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i.exec(part.url)
+
+      if (!match || match[1] !== part.mediaType) return []
+
+      return [{ type: 'image' as const, mimeType: part.mediaType, data: match[2]! }]
+    }),
+  )
 }
 
 const RESUME_MESSAGE: Record<ResumeReason, string> = {
@@ -103,6 +119,7 @@ export type PreparedPreviewTurn = {
   memory: PreviewTurnMemory | null
   systemPrompt: string | undefined
   message: string
+  images: AcpImageContent[]
   freshSessionMessage: (uncertain?: boolean) => string
   /** Queued-while-idle messages folded into the first prompt; persisted too. */
   carried: PendingUserMessage[]
@@ -162,6 +179,7 @@ export async function preparePreviewTurn(
   return {
     memory,
     systemPrompt,
+    images: args.resume ? [] : inputImages(inputs),
     message: prefixUserMessage(`${lastUserText}${carriedBlock}`, recallBlock),
     freshSessionMessage: (uncertain?: boolean) => {
       const preamble = previewHistoryPreamble(

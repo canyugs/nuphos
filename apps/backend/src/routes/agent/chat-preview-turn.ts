@@ -138,6 +138,7 @@ export async function runClaudeCodePreviewChatTurn(args: PreviewChatTurnArgs): P
       conversationOwnerUserId: userId,
       locale: args.locale,
       message,
+      images: prepared.images,
       ...(freshSessionMessage ? { freshSessionMessage } : {}),
       endpoint: args.endpoint,
       mcpServers: access.mcpServers,
