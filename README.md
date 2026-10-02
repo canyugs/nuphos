@@ -56,10 +56,10 @@ their lid.
 There is an Android client too; it is not open source yet. The iOS app is the
 one in here.
 
-The agent runtime is a separate repository:
-[`nuphos/nuphos-runtime`](https://github.com/nuphos/nuphos-runtime) (Apache-2.0).
-That image is what actually executes a turn, and a self-hosted deployment
-registers its own.
+The agent runtime lives in [`apps/runtime`](apps/runtime) (Apache-2.0).
+Its image executes a turn, and a self-hosted deployment registers its own.
+See [`apps/runtime/README.md`](apps/runtime/README.md) for building, running
+and independently releasing the runtime.
 
 ## Self-hosting
 
