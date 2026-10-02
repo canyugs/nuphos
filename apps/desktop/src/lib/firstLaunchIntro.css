@@ -14,5 +14,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .first-launch-intro { transition: none; }
+  .first-launch-intro {
+    transition: none;
+  }
 }

@@ -12,7 +12,8 @@ export function showFirstLaunchIntro() {
   } catch {
     // Use the system theme when storage is unavailable.
   }
-  const light = preference === 'light' ||
+  const light =
+    preference === 'light' ||
     (preference !== 'dark' && window.matchMedia('(prefers-color-scheme: light)').matches)
   const url = new URL('logo-intro/index.html', document.baseURI)
 
