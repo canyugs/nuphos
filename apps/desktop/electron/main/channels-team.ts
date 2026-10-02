@@ -52,6 +52,13 @@ export const teamChannels = {
   ) => atlas.updateRuntimeInstance(teamId, runtimeId, input),
   'atlas:removeRuntimeInstance': (_e: unknown, teamId: string, runtimeId: string) =>
     atlas.removeRuntimeInstance(teamId, runtimeId),
+  'atlas:readRuntimeFile': (
+    _e: unknown,
+    teamId: string,
+    runtimeId: string,
+    sessionId: string,
+    path: string,
+  ) => atlas.readRuntimeFile(teamId, runtimeId, sessionId, path),
   'atlas:getRuntimeModels': (_e: unknown, teamId: string, runtimeId: string, model?: string) =>
     atlas.getRuntimeModels(teamId, runtimeId, model),
   'atlas:requestRuntimeUpdate': (_e: unknown, teamId: string, runtimeId: string) =>

@@ -5,6 +5,7 @@ import { normalizeRecallFirstOrder, recallLeadCount } from '../../../lib/agentMe
 import { MessageResponse } from '../MessageResponse'
 import { PermissionGrantCard } from '../PermissionGrantCard'
 import { isPlanProposalToolName } from '../planReference'
+import { useRuntimeFileRenderer } from '../runtimeFileRenderer'
 
 import { extractProposalIdFromOutput } from './applyEvent'
 import { finalizeToolPartForDisplay } from './clientTools'
@@ -14,10 +15,10 @@ import { AssistantMessageActions } from './messageActions'
 import { CollapsedWorkView, PlanBookkeepingPart, ThinkingPartView } from './partChrome'
 import { isHiddenMemoryIngestPart } from './parts'
 import { renderPartRange } from './renderPartRange'
-import { foldedTurnLayout } from './toolRuns'
 import { assistantPartKey, lastVisiblePartIndex, turnWorkSeconds } from './streamText'
 import { AssistantPlanPart, ChartToolPart } from './toolParts'
 import { ToolPartView } from './ToolPartView'
+import { foldedTurnLayout } from './toolRuns'
 import { DownloadFilesCard } from './transferCards'
 import { turnFoldSplitIndex } from './turnFold'
 import { TurnInterruptedPartView } from './TurnInterruptedPartView'
@@ -29,10 +30,7 @@ import type { RenderPartOptions } from './renderPartRange'
 import type { ActivePlanCanAct } from './toolParts'
 import type { FileTransferGroup } from '../../../types'
 
-// Memoized so a long transcript doesn't re-render every message on each parent
-// update (notably the 1s `now` tick during streaming). Historical messages keep
-// their object identity across updates, so memo skips them; only the streaming
-// message — which gets a live `now` and a changing `message` — actually redraws.
+// Memoized: historical messages keep their identity while the streaming message redraws.
 export const AssistantMessage = memo(
   ({
     message,
@@ -85,6 +83,7 @@ export const AssistantMessage = memo(
     ) => void
     onRequestFeedbackComment?: (messageId: string) => void
   }) => {
+    const renderFileLink = useRuntimeFileRenderer(teamId, sessionId)
     const orderedParts = normalizeRecallFirstOrder(message.parts)
     const recallLead = recallLeadCount(orderedParts)
     const streamingTailIndex = streaming ? lastVisiblePartIndex(orderedParts) : -1
@@ -131,6 +130,7 @@ export const AssistantMessage = memo(
           <MessageResponse
             key={partKey}
             streaming={isStreamingTail}
+            renderLink={renderFileLink}
             teamId={teamId}
             currentUrl={currentUrl}
             onLinkClick={onOpenNuphosLink}

@@ -145,3 +145,17 @@ for (const provider of ['claude-code', 'codex'] as const) {
     expect(prompt).toContain('metadata does not verify or supply the sender’s email')
   })
 }
+
+test('file links pin the source runtime and conversation in server-provided context', async () => {
+  const prompt = await buildPreviewSystemPrompt({
+    userId: 'user-1',
+    teamId: 'team-1',
+    sessionId: 'conv-1',
+    locale: 'en',
+    runtimeId: 'local:user:device:codex',
+  })
+  expect(prompt).toContain(
+    'https://nuphos.ai/teams/team-1/agent-runtimes/local%3Auser%3Adevice%3Acodex/files/content?sessionId=conv-1&path=',
+  )
+  expect(prompt).toContain('not a permanent snapshot')
+})

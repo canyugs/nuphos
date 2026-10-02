@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { readRuntimeFile } from '@/lib/claude-code-preview/runtime-file'
+
 import { isLocalRuntimeId } from '@/lib/agent/devices/local-runtime/address'
 import { localRuntimeStatus } from '@/lib/claude-code-preview/local-runtime-catalog'
 import { isAllowedRemoteOpenAbUrl } from '@/lib/claude-code-preview/runtime-backend-url'
@@ -74,6 +76,31 @@ function registerRuntimeQuotaRoute(teamScoped: Hono<{ Variables: TeamAuthVariabl
 }
 
 export function registerAgentRuntimeRoutes(teamScoped: Hono<{ Variables: TeamAuthVariables }>) {
+  teamScoped.get(
+    '/agent-runtimes/:runtimeId/files/content',
+    zv(
+      'query',
+      z.object({
+        sessionId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),
+        path: z.string().min(1).max(4096),
+      }),
+    ),
+    async (c) => {
+      const { sessionId, path } = c.req.valid('query')
+
+      c.header('Cache-Control', 'no-store')
+
+      return c.json(
+        await readRuntimeFile(
+          c.get('teamId'),
+          c.get('userId'),
+          c.req.param('runtimeId'),
+          sessionId,
+          path,
+        ),
+      )
+    },
+  )
   teamScoped.get('/agent-runtimes', async (c) =>
     c.json({ runtimes: await listRuntimeInstances(c.get('teamId'), c.get('userId')) }),
   )

@@ -23,6 +23,7 @@ export async function sessionConfigRestoreContext(
   const provider = conversation.agentRuntime === 'codex' ? 'codex' : 'claude-code'
   const systemPrompt = await buildPreviewSystemPrompt({
     provider,
+    runtimeId: conversation.runtimeId,
     userId: conversation.userId,
     teamId,
     sessionId: conversation.sessionId,
