@@ -160,6 +160,10 @@ A few rules:
 - If you did open a draft and then finished the work in the same session, flip it with `gh pr ready <number> --repo myorg/myrepo` and say so.
 - Before creating new commits, run setup with the target repository as its third argument. It uses the authenticated Nuphos actor's name/email for repository-local `author.name`/`author.email`, and resolves the selected App bot for `committer.name`/`committer.email`. Run it again before committing on a later turn so a different participant never inherits the previous author's identity. This supports self-hosted Apps without a fixed Nuphos identity.
 - Do not hardcode author names/emails, infer the App from `accountLogin` (the installation owner), or override the resolved identities using `git -c user.*`/`author.*`/`committer.*`, `--author`, or `GIT_AUTHOR_*`/`GIT_COMMITTER_*`. Do not infer the human author from runtime/provider accounts, the installation owner, or the durable conversation owner; use only the backend `commitAuthor`. If identity lookup fails, stop before committing; do not substitute an unlinked email.
+- Add one runtime co-author trailer to each new commit message, separated from the body by a blank line. Use the runtime executing this turn, not the model name, installed CLI binaries, or a previous session's runtime:
+  - Claude Code: `Co-authored-by: claude <noreply@anthropic.com>`
+  - Codex: `Co-authored-by: codex <codex@openai.com>`
+  - Do not add both for a single-runtime change or duplicate a trailer the runtime already added. Preserve legitimate existing co-authors when amending or cherry-picking.
 - Preserve original authors when amending or cherry-picking someone else's commits. After pushing a new commit, verify its raw author name/email match `commitAuthor` and its `committer.login` matches the resolved bot. A human email only links to a GitHub profile if that account has registered it; report an unlinked author without substituting a different email.
 - If the repo has CODEOWNERS or required reviews, mention that the PR will need a human reviewer — `gh` will not bypass branch protection.
 
