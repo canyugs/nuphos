@@ -138,3 +138,17 @@ export function requestRuntimeUpdate(
 ): Promise<{ version: string }> {
   return call('POST', `${path(teamId, runtimeId)}/update`, undefined, { retry: false })
 }
+
+export function readRuntimeFile(
+  teamId: string,
+  runtimeId: string,
+  sessionId: string,
+  filePath: string,
+): Promise<{ name: string; size: number; data: string }> {
+  const query = new URLSearchParams({ sessionId, path: filePath })
+
+  return call('GET', `${path(teamId, runtimeId)}/files/content?${query.toString()}`, undefined, {
+    retry: false,
+    timeoutMs: 20_000,
+  })
+}

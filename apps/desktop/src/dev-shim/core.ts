@@ -28,10 +28,15 @@ export function coreMethods(): Record<string, any> {
       call('PATCH', `/teams/${teamId}/agent-runtimes/${runtimeId}`, input),
     atlasRemoveRuntimeInstance: (teamId: string, runtimeId: string) =>
       call('DELETE', `/teams/${teamId}/agent-runtimes/${runtimeId}`),
+    atlasReadRuntimeFile: (teamId: string, runtimeId: string, sessionId: string, path: string) =>
+      call(
+        'GET',
+        `/teams/${encodeURIComponent(teamId)}/agent-runtimes/${encodeURIComponent(runtimeId)}/files/content?${new URLSearchParams({ sessionId, path }).toString()}`,
+      ),
     atlasGetRuntimeModels: (teamId: string, runtimeId: string, model?: string) =>
       call(
         'GET',
-        `/teams/${teamId}/agent-runtimes/${runtimeId}/models${model ? '?model=' + encodeURIComponent(model) : ''}`,
+        `/teams/${teamId}/agent-runtimes/${runtimeId}/models${model ? `?model=${encodeURIComponent(model)}` : ''}`,
       ),
     atlasGetRuntimeInstanceStatus: (teamId: string, runtimeId: string) =>
       call('GET', `/teams/${teamId}/agent-runtimes/${runtimeId}/status`),

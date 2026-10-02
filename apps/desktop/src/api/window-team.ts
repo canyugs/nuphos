@@ -70,6 +70,12 @@ export type WindowTeamApi = {
     input: UpdateRuntimeInput,
   ): Promise<RuntimeInstance>
   atlasRemoveRuntimeInstance(teamId: string, runtimeId: string): Promise<void>
+  atlasReadRuntimeFile(
+    teamId: string,
+    runtimeId: string,
+    sessionId: string,
+    path: string,
+  ): Promise<{ name: string; size: number; data: string }>
   atlasGetRuntimeModels(
     teamId: string,
     runtimeId: string,

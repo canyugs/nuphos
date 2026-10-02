@@ -29,6 +29,7 @@ import { renderPermissionWallPrompt } from '@/routes/agent/permission-wall'
 import { getAgentCredentialAccess } from '@/routes/agent-sessions/shared'
 
 export type PreviewPromptArgs = {
+  runtimeId?: string
   provider?: 'claude-code' | 'codex'
   userId: string
   conversationOwnerUserId?: string
@@ -158,6 +159,14 @@ export async function buildPreviewSystemPrompt(args: PreviewPromptArgs): Promise
     nativeText(`${planMessage}\n\n${PLAN_RUNTIME_NOTE}`),
     nativeText(DASHBOARDS_RUNTIME_NOTE),
     nativeText(backgroundMonitorNote(args.provider)),
+    args.runtimeId
+      ? [
+          '## File preview links',
+          'For files in this runtime workspace, use a Markdown link to this exact prefix followed by the URL-encoded file path:',
+          `https://nuphos.ai/teams/${encodeURIComponent(args.teamId)}/agent-runtimes/${encodeURIComponent(args.runtimeId)}/files/content?sessionId=${encodeURIComponent(args.sessionId)}&path=`,
+          'Use the path of an existing file, preferably relative to the runtime workspace. This link reads the live file from this specific runtime; it is not a permanent snapshot. Do not use it for credentials, files outside this runtime workspace, or files on another host. Desktop previews text and raster images up to 512 KiB. Use file-transfer for larger files or durable delivery.',
+        ].join('\n')
+      : null,
     previewChannelPromptSection({ teamId: args.teamId, slackThread: args.slackThread }),
     nativeText(buildNuphosLinksMessage(args.teamId, { nativeClaudeSkills: true })),
     COMMUNICATION_DISCIPLINE_MESSAGE,

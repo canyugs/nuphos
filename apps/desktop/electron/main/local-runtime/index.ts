@@ -18,6 +18,7 @@ import { agentEnv, bundleFromManifest } from './config.ts'
 import { LocalRuntimeController } from './controller.ts'
 import { devBundleHint, watchDevBundle } from './dev-bundle.ts'
 import { LocalExecStream } from './exec-stream.ts'
+import { LocalFileStream } from './file-stream.ts'
 import { probeLocalModels } from './model-probe.ts'
 import { OpenabProcess } from './openab-process.ts'
 import { RuntimeTunnelClient } from './tunnel-client.ts'
@@ -101,7 +102,7 @@ function broadcastState(): void {
   for (const win of BrowserWindow.getAllWindows()) win.webContents.send('localRuntime:state', state)
 }
 
-const controller = new LocalRuntimeController({
+const controller: LocalRuntimeController = new LocalRuntimeController({
   bundle: findBundle,
   dataDir,
   nodeExecPath: process.execPath,
@@ -152,6 +153,11 @@ const controller = new LocalRuntimeController({
             [CLIENT_VERSION_HEADER]: CLIENT_VERSION_VALUE,
           },
         })
+      },
+      connectFile: () => {
+        const workspace = controller.state().workspace
+
+        return workspace ? new LocalFileStream(workspace) : null
       },
       connectExec: () => new LocalExecStream(),
       connectRuntime: (purpose, provider) => {
