@@ -7,11 +7,13 @@ fi
 
 usage() {
   cat >&2 <<EOF
-Usage: setup-credentials.sh <teamId> <installationId>
+Usage: setup-credentials.sh <teamId> <installationId> [repoDir]
 
   teamId          Nuphos team id (24-char hex)
   installationId  Numeric GitHub App installation id (from
                   GET /teams/<teamId>/github-installations)
+
+  repoDir         Optional. Configure this repository's commit identity as the App bot.
 
 Environment:
   GH_CONFIG_DIR     Optional. Defaults to \$XDG_CONFIG_HOME/gh or \$HOME/.config/gh.
@@ -28,10 +30,15 @@ EOF
   exit 1
 }
 
-if [ "$#" -lt 2 ]; then usage; fi
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then usage; fi
 
 team_id="$1"
 installation_id="$2"
+repo_dir="${3:-}"
+
+if [ -n "$repo_dir" ]; then
+  git -C "$repo_dir" rev-parse --git-dir >/dev/null
+fi
 
 if ! [[ "$team_id" =~ ^[0-9a-fA-F]{24}$ ]]; then
   echo "invalid teamId: expected a 24-char hex Nuphos team id, got '$team_id'" >&2
@@ -109,3 +116,29 @@ echo "Expires at: $expires_at"
 echo
 echo "Use \`gh ...\` or \`gh api /repos/...\` directly. \`gh repo clone owner/repo\` and \`git push\` also work."
 echo "Re-run this script if you get 401."
+
+# Resolve identity only for a write workflow; read-only setup needs no author.
+if [ -n "$repo_dir" ]; then
+  app_slug="$(printf '%s' "$token_response" | python3 -c '
+import json, re, sys
+slug = json.load(sys.stdin).get("appSlug")
+if not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9-]+", slug):
+    sys.exit("Missing or invalid appSlug from backend; cannot configure commit identity")
+print(slug)
+')"
+  bot_json="$(gh api --hostname github.com "users/${app_slug}[bot]")"
+  bot_identity="$(printf '%s' "$bot_json" | python3 -c '
+import json, sys
+bot = json.load(sys.stdin)
+login, user_id = bot.get("login"), bot.get("id")
+if bot.get("type") != "Bot" or login != sys.argv[1] or type(user_id) is not int or user_id <= 0:
+    sys.exit("GitHub did not return the expected App bot; commit identity unchanged")
+print(login)
+print(f"{user_id}+{login}@users.noreply.github.com")
+' "${app_slug}[bot]")"
+  bot_name="${bot_identity%%$'\n'*}"
+  bot_email="${bot_identity#*$'\n'}"
+  git -C "$repo_dir" config --local user.name "$bot_name"
+  git -C "$repo_dir" config --local user.email "$bot_email"
+  echo "Repository commit identity: $bot_name <$bot_email>"
+fi

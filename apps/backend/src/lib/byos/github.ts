@@ -21,6 +21,7 @@ export type GithubInstallationInfo = {
     type: 'User' | 'Organization'
   }
   appId: number
+  appSlug: string
   targetType: 'User' | 'Organization'
   permissions: Record<string, string>
   repositorySelection: 'all' | 'selected'
@@ -75,6 +76,7 @@ type RawInstallation = {
   id: number
   account: { id: number; login: string; type: string } | null
   app_id: number
+  app_slug: string
   target_type: 'User' | 'Organization'
   permissions: Record<string, string>
   repository_selection: 'all' | 'selected'
@@ -95,6 +97,7 @@ function mapInstallation(raw: RawInstallation): GithubInstallationInfo {
       type: accountType,
     },
     appId: raw.app_id,
+    appSlug: raw.app_slug,
     targetType: raw.target_type,
     permissions: raw.permissions ?? {},
     repositorySelection: raw.repository_selection,

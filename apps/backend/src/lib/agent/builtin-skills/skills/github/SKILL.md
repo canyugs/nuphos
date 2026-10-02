@@ -140,10 +140,11 @@ gh repo clone myorg/myrepo repo
 cd repo
 
 git checkout -b agent/<short-description>
+# Use the same selected installation; repoDir scopes the author to this checkout.
+bash /absolute/path/to/skills/github/scripts/setup-credentials.sh <teamId> <installationId> "$PWD"
 # ... edit files ...
 git add -A
-git -c user.email="nuphos-agent@nuphos.ai" -c user.name="Nuphos Agent" \
-  commit -m "<concise message>"
+git commit -m "<concise message>"
 git push -u origin "$(git rev-parse --abbrev-ref HEAD)"
 
 gh pr create --base main --title "..." --body "..."
@@ -157,7 +158,9 @@ A few rules:
   - The branch does not yet do what was asked: something is stubbed or `TODO`, a check you ran is failing and you haven't fixed it, or you're stopping partway and intend to push more commits to that same branch before a human should read it.
 - Uncertainty is **not** a reason to draft. "I'm not sure this is the right approach", "the repo has no tests so I couldn't verify", "the user may want it done differently" — open the PR ready for review and write the doubt into the PR body, where a reviewer can act on it. A draft with a finished branch inside just delays the review the user asked for.
 - If you did open a draft and then finished the work in the same session, flip it with `gh pr ready <number> --repo myorg/myrepo` and say so.
-- Set the commit author to `Nuphos Agent <nuphos-agent@nuphos.ai>` so it's clear in the history that the change came from the agent.
+- Before creating new commits, run setup with the target repository as its third argument. It resolves the selected installation's App slug and bot user ID, then writes repository-local `user.name` and `user.email`. This supports self-hosted Apps without a fixed Nuphos identity.
+- Do not hardcode author names/emails, infer the App from `accountLogin` (the installation owner), or override the resolved identity using `git -c user.*`, `--author`, or `GIT_AUTHOR_*`/`GIT_COMMITTER_*`. If identity lookup fails, stop before committing; do not substitute an unlinked email.
+- Preserve original authors when amending or cherry-picking someone else's commits. After pushing a new commit, verify its GitHub API `author.login` and `committer.login` match the resolved bot.
 - If the repo has CODEOWNERS or required reviews, mention that the PR will need a human reviewer — `gh` will not bypass branch protection.
 
 ## Safety

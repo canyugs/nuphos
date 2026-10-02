@@ -221,11 +221,14 @@ installationScoped.get('/token', requireTeamRole('ADMINISTRATOR', 'EDITOR'), asy
       c.get('githubRepositoryId'),
     )
 
+    const { appSlug } = await getInstallation(installationId)
+
     c.header('X-Credentials-Expires-At', expiresAt.toISOString())
 
     return c.json({
       token,
       expiresAt: expiresAt.toISOString(),
+      appSlug,
       installationId,
       accountLogin: c.get('githubAccountLogin'),
     })
