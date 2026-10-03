@@ -21,6 +21,7 @@ import { BrowserView } from '../../views/BrowserView'
 import { TerminalView } from '../../views/TerminalView'
 import { MonitoringView } from '../../views/MonitoringView'
 import { PlansView } from '../../views/PlansView'
+import { RuntimeFilesView } from '../../views/RuntimeFilesView'
 import { TeamMembersView } from '../../views/TeamMembersView'
 import { TeamSkillsView } from '../../views/TeamSkillsView'
 import { TriggersView } from '../../views/TriggersView'
@@ -60,6 +61,8 @@ export function renderTeamToolPages(ctx: ScopeRenderContext): React.ReactNode | 
   } = ctx
 
   if (scope.kind !== 'team') return undefined
+
+  if (active === 'team.files') return <RuntimeFilesView teamId={scope.teamId} />
 
   if (active === 'team.terminal') return <TerminalView teamId={scope.teamId} />
 
