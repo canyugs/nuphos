@@ -73,8 +73,8 @@ function feed({ version, published, advertises }: RuntimeFeed) {
     }
 
     return Promise.resolve(
-      version && url.includes('/releases/latest')
-        ? Response.json({ tag_name: `v${version}`, body })
+      version && url.includes('/repos/nuphos/nuphos/releases?')
+        ? Response.json([{ tag_name: `runtime-v${version}`, body }])
         : new Response('', { status: 500 }),
     )
   }
