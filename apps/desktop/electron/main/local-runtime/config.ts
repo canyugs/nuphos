@@ -133,6 +133,8 @@ export function openabEnv(launch: LocalRuntimeLaunch): Record<string, string> {
     GATEWAY_LISTEN: `127.0.0.1:${String(launch.port)}`,
     GATEWAY_ALLOWED_USERS: 'acp_client',
     OPENAB_ACP_ENABLED: 'true',
+    OPENAB_RUNTIME_TERMINAL_CWD: launch.workspace,
+    OPENAB_RUNTIME_TERMINAL_HOME: launch.agentHome,
     OPENAB_ACP_MCP_SERVERS: 'true',
     OPENAB_ACP_STREAMING: 'true',
     OPENAB_ACP_AUTH_KEY: launch.authKey,
