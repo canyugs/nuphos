@@ -39,6 +39,8 @@ import { AppError } from '@/lib/errors'
 import { zv } from '@/lib/validate'
 import { requireTeamRole } from '@/middleware/auth'
 
+import { registerRuntimeFileRoutes } from './runtime-files'
+
 import type { TeamAuthVariables } from '@/middleware/auth'
 import type { Context, Hono } from 'hono'
 
@@ -80,6 +82,7 @@ function registerRuntimeQuotaRoute(teamScoped: Hono<{ Variables: TeamAuthVariabl
 }
 
 export function registerAgentRuntimeRoutes(teamScoped: Hono<{ Variables: TeamAuthVariables }>) {
+  registerRuntimeFileRoutes(teamScoped)
   teamScoped.get('/runtime-terminal/:sessionId', async (c) => {
     const target = await runtimeTerminalTarget(
       c.get('teamId'),
