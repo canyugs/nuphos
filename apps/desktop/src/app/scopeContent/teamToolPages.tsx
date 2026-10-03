@@ -18,7 +18,7 @@ import { ArchitectureView } from '../../views/ArchitectureView'
 import { ArchivedChatsView } from '../../views/ArchivedChatsView'
 import { AuditLogView } from '../../views/AuditLogView'
 import { BrowserView } from '../../views/BrowserView'
-import { LocalTerminalView } from '../../views/LocalTerminalView'
+import { TerminalView } from '../../views/TerminalView'
 import { MonitoringView } from '../../views/MonitoringView'
 import { PlansView } from '../../views/PlansView'
 import { TeamMembersView } from '../../views/TeamMembersView'
@@ -61,7 +61,7 @@ export function renderTeamToolPages(ctx: ScopeRenderContext): React.ReactNode | 
 
   if (scope.kind !== 'team') return undefined
 
-  if (active === 'team.terminal') return <LocalTerminalView />
+  if (active === 'team.terminal') return <TerminalView teamId={scope.teamId} />
 
   if (active === 'team.browser') {
     return (

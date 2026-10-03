@@ -1,3 +1,4 @@
+import { upgradeWebSocket } from 'hono/bun'
 import { z } from 'zod'
 
 import { isLocalRuntimeId } from '@/lib/agent/devices/local-runtime/address'
@@ -27,6 +28,10 @@ import {
 } from '@/lib/claude-code-preview/runtime-registry'
 import { claudeCodePreviewRuntimeStatus } from '@/lib/claude-code-preview/runtime-status'
 import {
+  runtimeTerminalTarget,
+  runtimeTerminalEvents,
+} from '@/lib/claude-code-preview/runtime-terminal'
+import {
   requestRuntimeUpdate,
   runtimeUpdateStatus,
 } from '@/lib/claude-code-preview/runtime-updates'
@@ -35,7 +40,7 @@ import { zv } from '@/lib/validate'
 import { requireTeamRole } from '@/middleware/auth'
 
 import type { TeamAuthVariables } from '@/middleware/auth'
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 
 const label = z.string().trim().min(1).max(120)
 const createSchema = z
@@ -75,6 +80,22 @@ function registerRuntimeQuotaRoute(teamScoped: Hono<{ Variables: TeamAuthVariabl
 }
 
 export function registerAgentRuntimeRoutes(teamScoped: Hono<{ Variables: TeamAuthVariables }>) {
+  teamScoped.get('/runtime-terminal/:sessionId', async (c) => {
+    const target = await runtimeTerminalTarget(
+      c.get('teamId'),
+      c.get('userId'),
+      c.req.param('sessionId'),
+    )
+
+    if (c.req.header('upgrade')?.toLowerCase() !== 'websocket')
+      throw new AppError(426, 'upgrade_required', 'Connect with a WebSocket')
+
+    return upgradeWebSocket(
+      c as unknown as Context,
+      runtimeTerminalEvents(target, { cols: c.req.query('cols'), rows: c.req.query('rows') }),
+    )
+  })
+
   teamScoped.get('/agent-runtimes', async (c) =>
     c.json({ runtimes: await listRuntimeInstances(c.get('teamId'), c.get('userId')) }),
   )

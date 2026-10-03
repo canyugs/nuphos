@@ -225,6 +225,7 @@ export function WorkspaceMainPane({ ws, user }: { ws: WorkspaceController; user:
                       }
                     >
                       <WorkspaceTabPane
+                        conversationId={mainPageOpen ? null : ws.selectedSessionId}
                         key={tab.id}
                         tab={tab}
                         isTeamAdmin={
