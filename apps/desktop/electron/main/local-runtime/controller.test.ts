@@ -21,6 +21,7 @@ function harness(
   bundled = { current: true },
 ) {
   const events: string[] = []
+  const probeHomes: (string | undefined)[] = []
   let changes = 0
   const seenCli: (AgentCliStatus | null)[] = []
   const exits: ((code: number | null) => void)[] = []
@@ -41,10 +42,13 @@ function harness(
     nodeExecPath: '/electron',
     backendUrl: 'https://api.example.com',
     userEnv: () => Promise.resolve({ PATH: '/bin' }),
-    probeCli: (provider) =>
-      Promise.resolve(
+    probeCli: (provider, _env, agentHome) => {
+      probeHomes.push(agentHome)
+
+      return Promise.resolve(
         cli[provider] ?? { installed: true, path: `/bin/${provider}`, loggedIn: true },
-      ),
+      )
+    },
     readUsage: () => {
       usageReads += 1
 
@@ -80,7 +84,7 @@ function harness(
       onExit: (listener) => {
         exits.push(listener)
 
-        return () => undefined
+        return () => {}
       },
     }),
     createTunnel: (_runtime, status, onChange) => {
@@ -93,7 +97,7 @@ function harness(
           events.push('tunnel:stop')
           onChange(false, false)
         },
-        sendStatus: () => undefined,
+        sendStatus: () => {},
         reconnectNow: () => events.push('tunnel:reconnect'),
       }
     },
@@ -116,6 +120,7 @@ function harness(
     changes: () => changes,
     seenCli,
     cliCache,
+    probeHomes,
   }
 }
 
@@ -360,4 +365,27 @@ test('a login observed by Check is recorded even though launching stops the agen
   assert.equal(typeof status()?.agents.codex?.usageAt, 'string')
   assert.ok(usageReads() >= 1)
   await controller.shutdown()
+})
+
+test('startup and refresh probe the same isolated homes used by the adapters', async () => {
+  const { controller, probeHomes } = harness()
+
+  await controller.setUser('alice')
+  assert.deepEqual(probeHomes, [home('claude-code'), home('codex')])
+  probeHomes.length = 0
+  await controller.refresh()
+  assert.deepEqual(probeHomes, [home('claude-code'), home('codex')])
+  await controller.setUser(null)
+  probeHomes.length = 0
+  await controller.refresh()
+  assert.deepEqual(probeHomes, [])
+})
+
+test('reconnecting Claude after login leaves the Codex process running', async () => {
+  const { controller, events } = harness()
+
+  await controller.setUser('alice')
+  events.length = 0
+  await controller.refresh(true, ['claude-code'])
+  assert.deepEqual(events, ['stop', started('claude-code')])
 })

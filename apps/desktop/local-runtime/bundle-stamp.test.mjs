@@ -49,5 +49,9 @@ test('the stamp follows the pins and patches in the staging sources', () => {
   assert.equal(bundleStamp(dir), before)
   writeFileSync(join(dir, 'prepare.mjs'), "export const OPENAB_COMMIT = 'next'")
   assert.notEqual(bundleStamp(dir), before)
+  const previous = bundleStamp(dir)
+
+  writeFileSync(join(dir, 'claude-session-env.mjs'), '// next shell environment')
+  assert.notEqual(bundleStamp(dir), previous)
   assert.notEqual(digestOf(['adapter-patches.mjs'], dir), digestOf(['skills-sync.mjs'], dir))
 })

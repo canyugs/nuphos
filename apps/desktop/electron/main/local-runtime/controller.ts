@@ -15,15 +15,13 @@ import { createUsageSampler } from './usage-sampler.ts'
 import type { LocalAgentProvider } from './agent-cli.ts'
 import type {
   Agent,
+  LocalAgentRun,
   LocalRuntimeControllerDeps,
   LocalRuntimeState,
   RuntimeTunnel,
 } from './controller-types.ts'
 
-/**
- * Owns this computer's agents for the signed-in user: an open tunnel, one openab per installed
- * CLI, all state keyed to that user and torn down on any change of account.
- */
+/** Owns local agents and their tunnel; tears down all state on an account change. */
 export class LocalRuntimeController {
   private userId: string | null = null
   private readonly agents: Record<LocalAgentProvider, Agent> = {
@@ -35,7 +33,6 @@ export class LocalRuntimeController {
   private online = false
   private superseded = false
   private readonly deps: LocalRuntimeControllerDeps
-
   constructor(deps: LocalRuntimeControllerDeps) {
     this.deps = deps
     this.usage = createUsageSampler(this.agents, deps, () => this.tunnel?.sendStatus())
@@ -75,21 +72,31 @@ export class LocalRuntimeController {
   }
 
   /** Re-reads each CLI, e.g. after a terminal sign-in; `restart` relaunches running agents too. */
-  async refresh(restart = false): Promise<LocalRuntimeState> {
+  async refresh(
+    restart = false,
+    providers: readonly LocalAgentProvider[] = LOCAL_AGENT_PROVIDERS,
+  ): Promise<LocalRuntimeState> {
+    const userId = this.userId
+
+    if (!userId) return this.state()
     const env = await this.deps.userEnv()
 
     await Promise.all(
-      LOCAL_AGENT_PROVIDERS.map(async (provider) => {
-        this.agents[provider].cli = await this.deps.probeCli(provider, env)
+      providers.map(async (provider) => {
+        const agentHome = this.prepareHome(provider, userId)
+        const cli = await this.deps.probeCli(provider, env, agentHome)
+
+        if (userId === this.userId) this.agents[provider].cli = cli
       }),
     )
+    if (userId !== this.userId) return this.state()
     saveCli(this.deps, this.userId, this.agents)
     this.tunnel?.sendStatus()
     this.changed()
     await Promise.all(
-      LOCAL_AGENT_PROVIDERS.filter((provider) => restart || !this.agents[provider].process).map(
-        (provider) => this.launch(provider),
-      ),
+      providers
+        .filter((provider) => restart || !this.agents[provider].process)
+        .map((provider) => this.launch(provider)),
     )
     // After the launches, never before: `launch` stops the agent first, and a
     // read in flight across that bump is thrown away as stale. An agent that
@@ -115,6 +122,13 @@ export class LocalRuntimeController {
 
   private changed(): void {
     this.deps.onChange?.()
+  }
+
+  private prepareHome(provider: LocalAgentProvider, userId: string): string | undefined {
+    const dir = userDir(this.deps.dataDir(), userId)
+    const workspace = userDir(this.deps.dataDir(), userId, 'workspace')
+
+    return this.deps.prepareAgentHome(provider, dir, workspace)
   }
 
   private async stopAgent(provider: LocalAgentProvider): Promise<void> {
@@ -162,11 +176,15 @@ export class LocalRuntimeController {
       return
     }
     const env = await this.deps.userEnv()
-
     const probedAt = Date.now()
 
-    agent.cli = await this.deps.probeCli(provider, env)
     if (!current()) return
+    const agentHome = this.prepareHome(provider, userId)
+
+    const cli = await this.deps.probeCli(provider, env, agentHome)
+
+    if (!current()) return
+    agent.cli = cli
     this.deps.log?.('local agent: CLI checked', { provider, ms: Date.now() - probedAt })
     saveCli(this.deps, this.userId, this.agents)
     this.changed()
@@ -176,36 +194,16 @@ export class LocalRuntimeController {
 
       return
     }
-    const agentHome = this.deps.prepareAgentHome(
-      provider,
-      userDir(this.deps.dataDir(), userId),
-      userDir(this.deps.dataDir(), userId, 'workspace'),
-    )
-
     if (!agentHome) {
       agent.error = AGENT_HOME_UNAVAILABLE[provider]
 
       return
     }
 
-    await this.startProcess({
-      provider,
-      userId,
-      cliPath: agent.cli.path,
-      env,
-      current,
-      agentHome,
-    })
+    await this.startProcess({ provider, userId, cliPath: agent.cli.path, env, current, agentHome })
   }
 
-  private async startProcess(run: {
-    provider: LocalAgentProvider
-    userId: string
-    cliPath: string
-    agentHome: string
-    env: NodeJS.ProcessEnv
-    current: () => boolean
-  }): Promise<void> {
+  private async startProcess(run: LocalAgentRun): Promise<void> {
     const agent = this.agents[run.provider]
     const bundle = this.deps.bundle()
     const adapter = bundle?.adapters[run.provider]

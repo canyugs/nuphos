@@ -53,7 +53,11 @@ export type LocalRuntimeControllerDeps = {
   /** Where this app reaches Nuphos; the agents on this computer use the same address. */
   backendUrl: string
   userEnv: () => Promise<NodeJS.ProcessEnv>
-  probeCli: (provider: LocalAgentProvider, env: NodeJS.ProcessEnv) => Promise<AgentCliStatus>
+  probeCli: (
+    provider: LocalAgentProvider,
+    env: NodeJS.ProcessEnv,
+    agentHome: string | undefined,
+  ) => Promise<AgentCliStatus>
   /** Asks the provider what is left of this computer's account; undefined when
    *  it cannot say, which leaves the last reading in place. */
   readUsage: (provider: LocalAgentProvider, env: NodeJS.ProcessEnv) => Promise<unknown>
@@ -194,4 +198,9 @@ export function knownCli(
       return cli ? [[provider, cli]] : []
     }),
   )
+}
+
+export type LocalAgentRun = Omit<ProbeModelsRun, 'workspace'> & {
+  userId: string
+  current: () => boolean
 }
