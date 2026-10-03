@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { nuphosLocalSyncSkills } from './skills-sync.mjs'
 
 function replaceOnce(source, anchor, replacement) {
@@ -30,6 +32,22 @@ export function patchDesktopAdapter(source) {
     'await nuphosSyncRuntimeSkills(params);',
     'await nuphosLocalSyncSkills(params);',
   )
+  // Only Codex has this session-config handoff.
+  const cuaAnchor = 'Object.entries(config.mcp_servers ?? {}).map'
+
+  if (patched.includes('export function nuphosCodexSessionConfig(')) {
+    patched = replaceOnce(
+      patched,
+      cuaAnchor,
+      'Object.entries(nuphosLocalCodexMcpServers(config, processEnv)).map',
+    )
+    const cua = readFileSync(new URL('./codex-cua.mjs', import.meta.url), 'utf8').replace(
+      'export function',
+      'function',
+    )
+
+    patched += `\n${cua}`
+  }
   const shebang = /^#![^\n]*\n/u.exec(patched)?.[0] ?? ''
 
   return `${shebang}${nuphosLocalSyncSkills.toString()}\n${patched.slice(shebang.length)}`
