@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import os from 'node:os'
 import path from 'node:path'
 
 import type { LocalAgentProvider } from './agent-cli.ts'
@@ -74,7 +75,12 @@ function tomlString(value: string): string {
 /** Nuphos sessions run as the team's agent, never with the owner's personal config or connectors. */
 function providerEnv(launch: LocalRuntimeLaunch): Record<string, string> {
   if (launch.provider === 'codex')
-    return { CODEX_PATH: launch.cliPath, CODEX_HOME: launch.agentHome }
+    return {
+      CODEX_PATH: launch.cliPath,
+      CODEX_HOME: launch.agentHome,
+      NUPHOS_CODEX_USER_HOME:
+        launch.env.CODEX_HOME ?? path.join(launch.env.HOME ?? os.homedir(), '.codex'),
+    }
 
   return {
     CLAUDE_CODE_EXECUTABLE: launch.cliPath,
