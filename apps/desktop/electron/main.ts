@@ -1,3 +1,6 @@
+// First: seeds NUPHOS_API_URL before any module resolves its base URL.
+import './api-endpoint'
+
 import path from 'node:path'
 
 import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron'

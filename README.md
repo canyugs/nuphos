@@ -81,10 +81,11 @@ Two things to know before you plan around it:
   in one instance live.
 - **The runtime signs in to Claude itself**, once, from its own console. You
   supply your own account; there is no key to configure in Nuphos.
-- **The iOS client is compiled against `nuphos.ai`.** `NuphosWeb.siteURL` is a
-  constant, not a setting, so pointing the app at your own deployment means
-  editing it and building your own. The desktop client takes `NUPHOS_API_URL`
-  and `NUPHOS_WEB_URL` at runtime; mobile has not caught up.
+- **Point the clients at your backend from the sign-in screen.** Desktop and
+  iOS both have a "Self-hosted? Set API endpoint" link there; email sign-in
+  works against any backend. Desktop also still takes `NUPHOS_API_URL` and
+  `NUPHOS_WEB_URL` at runtime. Google sign-in goes through the `nuphos.ai`
+  web page, so it only works against Nuphos Cloud.
 
 Not available self-hosted: managed runtime provisioning, managed backups, and
 the operational tooling that comes with running this as a service.
