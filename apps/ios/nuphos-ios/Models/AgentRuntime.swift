@@ -97,7 +97,7 @@ extension RuntimeInstance.Provider {
 /// Model / effort / fast controls the runtime exposes for one conversation
 /// (`GET|PATCH /agent/conversations/:id/model-config`).
 struct SessionConfigState: Codable, Equatable, Sendable {
-    enum Status: String, Codable, Sendable { case ready, busy, dormant, unsupported }
+    enum Status: String, Codable, Sendable { case ready, busy, dormant, unsupported, offline }
 
     struct Option: Codable, Equatable, Identifiable, Sendable {
         enum Kind: String, Codable, Sendable { case model, effort, fast }
@@ -126,12 +126,21 @@ struct SessionConfigState: Codable, Equatable, Sendable {
     var model: Option? { options.first { $0.kind == .model } }
     var isFast: Bool { options.contains { $0.kind == .fast && $0.currentValue == "on" } }
 
+    /// Writes restore a dormant session, so its remembered settings stay editable.
+    var isEditable: Bool { status == .ready || (status == .dormant && !options.isEmpty) }
+
+    /// Show the model whenever one is known; "unavailable" means the agent is offline.
+    var modelTitle: String {
+        if let model { return model.currentLabel }
+        return status == .offline ? "Model unavailable" : "Default model"
+    }
+
     var hint: String? {
         switch status {
-        case .busy: "Model settings are available after this reply."
-        case .dormant: "This session's model settings could not be restored. Try again in a moment."
-        case .unsupported: "Model settings are not available for this runtime."
-        case .ready: nil
+        case .busy: "You can change model settings after this reply."
+        case .dormant: options.isEmpty ? "Send a message to start this session before changing model settings." : nil
+        case .offline: "This agent is offline. Model settings return when it reconnects."
+        case .ready, .unsupported: nil
         }
     }
 }

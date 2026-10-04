@@ -20,25 +20,30 @@ function currentLabel(option: SessionConfigOption) {
   )
 }
 
-/** Trigger copy while there is no model to show yet. */
-function awaitingModelLabel(busy: boolean, stalled: boolean) {
-  if (!busy) return 'Loading model…'
+/** Show the model whenever one is known; "unavailable" means the agent is offline. */
+function modelLabel(
+  model: SessionConfigOption | undefined,
+  status: SessionConfigState['status'] | undefined,
+) {
+  if (model) return currentLabel(model)
+  if (status === 'offline') return 'Model unavailable'
 
-  return stalled ? 'Agent not responding' : 'Waiting for reply…'
+  return status ? 'Default model' : 'Model'
 }
 
 function modelHint(
+  status: SessionConfigState['status'] | undefined,
+  hasModel: boolean,
   busy: boolean,
   stalled: boolean,
-  streamingWithoutModel: boolean,
-  status: SessionConfigState['status'] | undefined,
 ) {
+  if (status === 'offline')
+    return 'This agent is offline. Model settings return when it reconnects.'
   if (busy && stalled)
     return "This agent hasn't responded in a while — it may be stuck. Try reconnecting below."
-  if (busy || streamingWithoutModel) return 'Model settings are available after this reply.'
-  if (status === 'dormant')
+  if (busy) return 'You can change model settings after this reply.'
+  if (status === 'dormant' && !hasModel)
     return 'Send a message to start this session before changing model settings.'
-  if (status === 'unsupported') return 'Model settings are not available for this agent.'
 }
 
 export function ModelSelector({
@@ -52,15 +57,20 @@ export function ModelSelector({
 }) {
   const { data, loading, slow, saving, error, stalled } = control
   const model = data?.options.find((option) => option.kind === 'model')
-  const busy = data?.status === 'busy'
-  const awaitingModel = !model && !error && (loading || streaming || busy)
-  const label = model
-    ? currentLabel(model)
-    : awaitingModel
-      ? awaitingModelLabel(busy, stalled)
-      : 'Model unavailable'
-  const blocked = disabled || saving || Boolean(error) || slow || data?.status !== 'ready'
-  const hint = modelHint(busy, stalled, streaming && !model, data?.status)
+  const status = data?.status
+  const busy = status === 'busy' || streaming
+
+  // A runtime that exposes no model controls gets no picker at all.
+  if (status === 'unsupported') return null
+  const label = modelLabel(model, status)
+  const blocked =
+    disabled ||
+    busy ||
+    saving ||
+    Boolean(error) ||
+    slow ||
+    (status !== 'ready' && status !== 'dormant')
+  const hint = modelHint(status, Boolean(model), busy, stalled)
 
   return (
     <Menu open={control.open} onOpenChange={control.setOpen}>
@@ -68,7 +78,7 @@ export function ModelSelector({
         aria-label={`Model settings: ${label}`}
         className="flex h-7 min-w-0 max-w-48 items-center gap-1 rounded-full px-2 text-[12px] text-secondary transition-colors hover:bg-zGray-800/60 hover:text-main"
       >
-        {(saving || awaitingModel) && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
+        {saving && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
         <span className="truncate">{label}</span>
         {data?.options.some((option) => option.kind === 'fast' && option.currentValue === 'on') && (
           <Zap className="h-3 w-3 shrink-0" />
@@ -94,7 +104,7 @@ export function ModelSelector({
           <p className="px-2.5 pb-2 text-[11px] text-tertiary">Showing last synced settings.</p>
         )}
         {hint && <p className="px-2.5 py-2 text-xs text-tertiary">{hint}</p>}
-        {disabled && data?.status === 'ready' && (
+        {disabled && !busy && status === 'ready' && (
           <p className="px-2.5 py-2 text-xs text-tertiary">
             Available when this conversation is ready for your next message.
           </p>

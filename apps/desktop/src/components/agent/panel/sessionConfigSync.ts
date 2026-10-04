@@ -91,10 +91,7 @@ export class SessionConfigSync {
       if (data.status === 'busy') this.busySince ??= Date.now()
       else this.busySince = undefined
       this.publish({
-        data:
-          data.status === 'busy' && this.snapshot.data
-            ? { ...data, options: this.snapshot.data.options }
-            : data,
+        data,
         loading: false,
         slow: false,
         error: undefined,
@@ -124,7 +121,7 @@ export class SessionConfigSync {
       !this.active ||
       this.snapshot.saving ||
       this.snapshot.error ||
-      this.snapshot.data?.status !== 'ready'
+      (this.snapshot.data?.status !== 'ready' && this.snapshot.data?.status !== 'dormant')
     )
       return
     const version = ++this.version
