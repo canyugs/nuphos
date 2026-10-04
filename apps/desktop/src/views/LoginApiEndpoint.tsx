@@ -27,16 +27,24 @@ function save(url: string | null) {
 
 /** The sign-in screen's quiet "self-hosted backend" switch. Saving relaunches the app. */
 export function LoginApiEndpoint({ inputClassName }: Props) {
-  const [current, setCurrent] = useState<string | null>(null)
+  const [endpoint, setEndpoint] = useState<{ url: string; editable: boolean } | null>(null)
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
 
   useEffect(() => {
-    void api.atlasGetApiUrl().then(setCurrent)
+    void api.appGetApiEndpoint().then(setEndpoint)
   }, [])
 
-  if (!current) return null
+  if (!endpoint) return null
+  const current = endpoint.url
   const custom = current !== DEFAULT_API_URL
+
+  if (!endpoint.editable) {
+    // Pinned at launch (dev launcher or NUPHOS_API_URL): show it, nothing to change.
+    return custom ? (
+      <p className="mt-6 text-[12px] text-tertiary">Server: {new URL(current).host}</p>
+    ) : null
+  }
 
   if (!editing) {
     return (

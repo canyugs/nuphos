@@ -82,10 +82,11 @@ Two things to know before you plan around it:
 - **The runtime signs in to Claude itself**, once, from its own console. You
   supply your own account; there is no key to configure in Nuphos.
 - **Point the clients at your backend from the sign-in screen.** Desktop and
-  iOS both have a "Self-hosted? Set API endpoint" link there; email sign-in
-  works against any backend. Desktop also still takes `NUPHOS_API_URL` and
-  `NUPHOS_WEB_URL` at runtime. Google sign-in goes through the `nuphos.ai`
-  web page, so it only works against Nuphos Cloud.
+  iOS both have a "Self-hosted? Set API endpoint" link there, and email
+  sign-in works against any backend. Changing it relaunches Desktop; a
+  launch-time `NUPHOS_API_URL` (as `bun run dev` sets) pins it instead.
+  Google sign-in goes through the `nuphos.ai` web page, so it only works
+  against Nuphos Cloud.
 
 Not available self-hosted: managed runtime provisioning, managed backups, and
 the operational tooling that comes with running this as a service.

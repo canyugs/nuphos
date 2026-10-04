@@ -42,6 +42,7 @@ export type WindowAppApi = {
   analyticsIdentify(userId: string, props?: Record<string, unknown>): Promise<void>
   analyticsSetTeam(teamId: string | null): Promise<void>
   appGetVersion(): Promise<string>
+  appGetApiEndpoint(): Promise<{ url: string; editable: boolean }>
   appSetApiEndpoint(url: string | null): Promise<void>
   appGetPlatform(): Promise<string>
   appSetNativeTheme(source: 'system' | 'light' | 'dark'): Promise<void>

@@ -3,11 +3,9 @@
 // Every module resolves its API base URL from NUPHOS_API_URL once, at import
 // time, so the saved choice is applied by seeding that variable before any of
 // them load: main.ts imports this module first. Changing it relaunches the app
-// instead of re-pointing live clients one by one. An explicit NUPHOS_API_URL
-// (or the legacy ATLAS_API_URL) still wins over the saved value.
+// instead of re-pointing live clients one by one.
 
 import fs from 'node:fs'
-import path from 'node:path'
 
 import { app } from 'electron'
 
@@ -17,7 +15,11 @@ import { CLI_CONFIG_PATH } from './cli-config-path.ts'
 // cli.dev.yaml never shares an endpoint with the installed app.
 const SAVED_PATH = `${CLI_CONFIG_PATH.replace(/\.ya?ml$/, '')}.api-url`
 
-if (!process.env.NUPHOS_API_URL && !process.env.ATLAS_API_URL) {
+// A launch-time NUPHOS_API_URL (the dev launcher, or a user's own) pins the
+// endpoint; the sign-in screen only shows it.
+const pinned = Boolean(process.env.NUPHOS_API_URL || process.env.ATLAS_API_URL)
+
+if (!pinned) {
   try {
     const saved = fs.readFileSync(SAVED_PATH, 'utf8').trim()
 
@@ -27,22 +29,27 @@ if (!process.env.NUPHOS_API_URL && !process.env.ATLAS_API_URL) {
   }
 }
 
+export function getApiEndpoint() {
+  return {
+    url: process.env.NUPHOS_API_URL || process.env.ATLAS_API_URL || 'https://api.nuphos.ai',
+    // An unpackaged app runs under vite, which a relaunch would leave behind.
+    editable: app.isPackaged && !pinned,
+  }
+}
+
 /** Saves the endpoint (`null` restores the default) and relaunches. */
 export function setApiEndpoint(raw: string | null) {
+  if (!getApiEndpoint().editable) throw new Error('The API endpoint is set at launch')
   if (raw === null) {
     fs.rmSync(SAVED_PATH, { force: true })
-    delete process.env.NUPHOS_API_URL
   } else {
     const url = new URL(raw.trim())
 
     if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Not an http(s) URL')
-
-    fs.mkdirSync(path.dirname(SAVED_PATH), { recursive: true })
     fs.writeFileSync(SAVED_PATH, `${url.origin}\n`, 'utf8')
-    // The relaunched process inherits this environment.
-    process.env.NUPHOS_API_URL = url.origin
   }
-  delete process.env.ATLAS_API_URL
+  // Unset, so the relaunched process reads the file instead of inheriting a pin.
+  delete process.env.NUPHOS_API_URL
   app.relaunch()
   app.exit(0)
 }

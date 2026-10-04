@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import { app, BrowserWindow, dialog, nativeTheme, shell } from 'electron'
 
 import * as agentChatSkill from '../agent-chat-skill'
-import { setApiEndpoint } from '../api-endpoint'
+import { getApiEndpoint, setApiEndpoint } from '../api-endpoint'
 import { resetAnalyticsUser, setAnalyticsTeam, setAnalyticsUser } from '../analytics'
 import * as atlas from '../atlas'
 import * as auth from '../auth'
@@ -56,6 +56,7 @@ export const appChannels = {
     setAnalyticsTeam(teamId)
   },
   'app:getVersion': () => app.getVersion(),
+  'app:getApiEndpoint': () => getApiEndpoint(),
   'app:setApiEndpoint': (_e: unknown, url: string | null) => setApiEndpoint(url),
   'app:getPlatform': () => process.platform,
   'app:setNativeTheme': (_e: unknown, source: ThemeSource) => {
