@@ -13,7 +13,9 @@ import { app } from 'electron'
 
 import { CLI_CONFIG_PATH } from './cli-config-path.ts'
 
-const SAVED_PATH = path.join(path.dirname(CLI_CONFIG_PATH), 'api-url')
+// Paired with the sign-in file (cli.yaml → cli.api-url), so `bun run dev`'s
+// cli.dev.yaml never shares an endpoint with the installed app.
+const SAVED_PATH = `${CLI_CONFIG_PATH.replace(/\.ya?ml$/, '')}.api-url`
 
 if (!process.env.NUPHOS_API_URL && !process.env.ATLAS_API_URL) {
   try {
