@@ -1,0 +1,330 @@
+package ai.nuphos.android.session
+
+import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import ai.nuphos.android.data.ConversationActions
+import ai.nuphos.android.data.NuphosApi
+import ai.nuphos.android.model.AgentConversation
+import ai.nuphos.android.model.ConversationScope
+import ai.nuphos.android.model.CredentialCatalog
+import ai.nuphos.android.model.CredentialSelection
+import ai.nuphos.android.model.PermissionMode
+import ai.nuphos.android.model.Team
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+
+class AgentStore(
+    private val token: String,
+    context: Context,
+) {
+    enum class Phase { Idle, Loading, Loaded, Failed }
+
+    val pageSize = 30
+    private val prefs = context.getSharedPreferences("nuphos.prefs", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    var teams: List<Team> by mutableStateOf(emptyList())
+        private set
+    var teamsPhase: Phase by mutableStateOf(Phase.Idle)
+        private set
+    var selectedTeam: Team? by mutableStateOf(null)
+        private set
+
+    var conversations: List<AgentConversation> by mutableStateOf(emptyList())
+        private set
+    var phase: Phase by mutableStateOf(Phase.Idle)
+        private set
+    var phaseError: String? by mutableStateOf(null)
+        private set
+    var isLoadingMore by mutableStateOf(false)
+        private set
+    var hasMore by mutableStateOf(false)
+        private set
+    private var nextCursor: String? = null
+
+    var scope: ConversationScope by mutableStateOf(ConversationScope.Mine)
+        private set
+    var search by mutableStateOf("")
+        private set
+
+    var archivedOnly by mutableStateOf(false)
+        private set
+    var favorites by mutableStateOf<ConversationActions.Favorites?>(null)
+        private set
+    var favoritesError by mutableStateOf<String?>(null)
+        private set
+
+    fun updateArchivedOnly(value: Boolean) {
+        if (value == archivedOnly) return
+        archivedOnly = value
+        storeScope.launch { reload() }
+    }
+    suspend fun loadFavorites() {
+        val team = selectedTeam ?: return
+        try {
+            val loaded = ConversationActions.favorites(token, team.id)
+            if (selectedTeam?.id != team.id) return
+            favorites = loaded
+            favoritesError = null
+        } catch (e: Exception) {
+            if (selectedTeam?.id == team.id) favoritesError = e.message
+        }
+    }
+    suspend fun pin(session: ChatSession, pinned: Boolean) {
+        require(selectedTeam?.id == session.teamId && session.loaded && session.loadError == null)
+        val saved = ConversationActions.pin(token, session.teamId, session.sessionId, session.title, pinned)
+        if (selectedTeam?.id == session.teamId) { favorites = saved; favoritesError = null }
+    }
+    suspend fun rename(session: ChatSession, title: String) {
+        require(session.canManage) { "Only the owner can rename this chat." }
+        ConversationActions.rename(token, session.teamId, session.sessionId, title)
+        session.reloadFromServer()
+        reload()
+    }
+    suspend fun archive(session: ChatSession, archived: Boolean) {
+        require(session.canManage) { "Only the owner can archive this chat." }
+        ConversationActions.archive(token, session.teamId, session.sessionId, archived)
+        session.reloadFromServer()
+        reload()
+    }
+
+    var credentialCatalog: CredentialCatalog? by mutableStateOf(null)
+        private set
+    var credentialCatalogError: String? by mutableStateOf(null)
+        private set
+    var credentialSelection by mutableStateOf(CredentialSelection())
+        private set
+    var permissionMode by mutableStateOf(
+        PermissionMode.from(prefs.getString(PERMISSION_KEY, null)),
+    )
+        private set
+    var pendingPrompt: ai.nuphos.android.model.ComposerSubmission? = null
+
+    private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var searchJob: Job? = null
+    private var loadGeneration = 0
+    private val sessions = mutableMapOf<String, ChatSession>()
+    private val hasAiAccess = AiAccess.bind(token)
+
+    init {
+        // Work outlives the view. Clean it only when its account capability expires.
+        storeScope.launch {
+            snapshotFlow { hasAiAccess() }.first { !it }
+            disposeForConsent()
+        }
+    }
+
+    fun updateScope(value: ConversationScope) {
+        if (value == scope) return
+        scope = value
+        storeScope.launch { reload() }
+    }
+
+    fun updateSearch(value: String) {
+        if (value == search) return
+        search = value
+        searchJob?.cancel()
+        searchJob = storeScope.launch {
+            delay(250)
+            reload()
+        }
+    }
+
+    fun updatePermissionMode(mode: PermissionMode) {
+        permissionMode = mode
+        prefs.edit().putString(PERMISSION_KEY, mode.raw).apply()
+    }
+
+    fun updateCredentialSelection(selection: CredentialSelection) {
+        credentialSelection = selection
+        persistCredentialSelection()
+    }
+
+    suspend fun loadCredentialOptions(force: Boolean = false) {
+        val team = selectedTeam ?: return
+        if (!force && credentialCatalog != null) return
+        try {
+            val catalog = NuphosApi.credentialOptions(token, team.id)
+            credentialCatalog = catalog
+            credentialCatalogError = null
+            credentialSelection = credentialSelection.pruned(catalog)
+        } catch (e: Exception) {
+            credentialCatalogError = e.message
+        }
+    }
+
+    suspend fun loadTeams() {
+        teamsPhase = Phase.Loading
+        try {
+            val loaded = NuphosApi.teams(token)
+            teams = loaded
+            teamsPhase = Phase.Loaded
+            val remembered = prefs.getString(LAST_TEAM_KEY, null)
+            val pick = loaded.firstOrNull { it.id == remembered } ?: loaded.firstOrNull()
+            if (pick != selectedTeam) {
+                selectedTeam = pick
+                favorites = null
+                favoritesError = null
+                credentialCatalog = null
+                restoreCredentialSelection()
+                reload()
+            } else if (phase == Phase.Idle) {
+                restoreCredentialSelection()
+                reload()
+            }
+        } catch (e: Exception) {
+            teamsPhase = Phase.Failed
+            phaseError = e.message
+            if (teams.isEmpty()) {
+                phase = Phase.Failed
+            }
+        }
+    }
+
+    fun select(team: Team) {
+        if (team == selectedTeam) return
+        selectedTeam = team
+        favorites = null
+        favoritesError = null
+        prefs.edit().putString(LAST_TEAM_KEY, team.id).apply()
+        credentialCatalog = null
+        restoreCredentialSelection()
+        storeScope.launch { reload() }
+    }
+
+    suspend fun reload() {
+        val team = selectedTeam
+        if (team == null) {
+            conversations = emptyList()
+            if (teamsPhase == Phase.Loaded) phase = Phase.Loaded
+            return
+        }
+        loadGeneration += 1
+        val generation = loadGeneration
+        if (conversations.isEmpty()) phase = Phase.Loading
+        try {
+            val page = NuphosApi.conversations(
+                token = token,
+                teamId = team.id,
+                limit = pageSize,
+                scope = scope,
+                search = search,
+                archivedOnly = archivedOnly,
+            )
+            if (generation != loadGeneration) return
+            conversations = page.conversations
+            nextCursor = page.nextCursor
+            hasMore = page.hasMore
+            phase = Phase.Loaded
+            phaseError = null
+        } catch (e: Exception) {
+            if (generation != loadGeneration) return
+            phase = Phase.Failed
+            phaseError = e.message
+        }
+    }
+
+    suspend fun loadMore() {
+        val team = selectedTeam
+        val cursor = nextCursor
+        if (!hasMore || isLoadingMore || team == null || cursor == null) return
+        isLoadingMore = true
+        val generation = loadGeneration
+        try {
+            val page = NuphosApi.conversations(
+                token = token,
+                teamId = team.id,
+                cursor = cursor,
+                limit = pageSize,
+                scope = scope,
+                search = search,
+                archivedOnly = archivedOnly,
+            )
+            if (generation != loadGeneration) return
+            val seen = conversations.map { it.sessionId }.toSet()
+            conversations = conversations + page.conversations.filter { it.sessionId !in seen }
+            nextCursor = page.nextCursor
+            hasMore = page.hasMore
+        } catch (_: Exception) {
+            // Leave what we have.
+        } finally {
+            isLoadingMore = false
+        }
+    }
+
+    fun session(forConversation: AgentConversation): ChatSession {
+        return sessions.getOrPut(forConversation.sessionId) {
+            ChatSession(
+                token = token,
+                teamId = forConversation.teamId ?: selectedTeam?.id.orEmpty(),
+                sessionId = forConversation.sessionId,
+                title = forConversation.displayTitle,
+            )
+        }
+    }
+
+    fun session(sessionId: String, title: String): ChatSession {
+        return sessions.getOrPut(sessionId) {
+            ChatSession(
+                token = token,
+                teamId = selectedTeam?.id.orEmpty(),
+                sessionId = sessionId,
+                title = title,
+            )
+        }
+    }
+
+    fun newSession(): ChatSession? {
+        val team = selectedTeam ?: return null
+        val session = ChatSession.fresh(token, team.id)
+        session.presetPermissionMode(permissionMode)
+        session.credentialAccess = if (credentialSelection.isEmpty) null else credentialSelection
+        sessions[session.sessionId] = session
+        return session
+    }
+
+    fun disposeForConsent() {
+        storeScope.coroutineContext[Job]?.cancel()
+        sessions.values.forEach { it.disposeForConsent() }
+        sessions.clear()
+        pendingPrompt?.attachments?.forEach { it.releaseOwnedCopy() }
+        pendingPrompt = null
+    }
+
+    private fun restoreCredentialSelection() {
+        val team = selectedTeam
+        if (team == null) {
+            credentialSelection = CredentialSelection()
+            return
+        }
+        val raw = prefs.getString(credentialKey(team), null)
+        credentialSelection = if (raw != null) {
+            runCatching { json.decodeFromString(CredentialSelection.serializer(), raw) }
+                .getOrDefault(CredentialSelection())
+        } else {
+            CredentialSelection()
+        }
+    }
+
+    private fun persistCredentialSelection() {
+        val team = selectedTeam ?: return
+        val raw = json.encodeToString(CredentialSelection.serializer(), credentialSelection)
+        prefs.edit().putString(credentialKey(team), raw).apply()
+    }
+
+    private fun credentialKey(team: Team) = "nuphos.credentialSelection.${team.id}"
+
+    companion object {
+        private const val LAST_TEAM_KEY = "nuphos.workspace.lastTeamId"
+        private const val PERMISSION_KEY = "nuphos.agentPermissionMode"
+    }
+}
