@@ -24,4 +24,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "nuphos-android"
 include(":app")
- 
