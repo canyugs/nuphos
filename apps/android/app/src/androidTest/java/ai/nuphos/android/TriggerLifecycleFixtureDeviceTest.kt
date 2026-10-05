@@ -120,8 +120,8 @@ class TriggerLifecycleFixtureDeviceTest {
             originals.forEach { (name, client) ->
                 Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client)
             }
-            assertEquals("Installed token changed", savedToken, app.tokenStore.read())
-            assertEquals("Installed preferences changed", preferences,
+            assertTrue("Installed token changed (values withheld)", savedToken == app.tokenStore.read())
+            assertTrue("Installed preferences changed (values withheld)", preferences ==
                 app.getSharedPreferences("nuphos.prefs", Context.MODE_PRIVATE).all)
             assertTrue("Unexpected local requests: $unexpected", unexpected.isEmpty())
             assertTrue("Browsing made a mutation: $requests", requests.all { it.method == "GET" })
