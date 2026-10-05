@@ -1,6 +1,8 @@
 // Deploys the runtimes Nuphos hosts. Everything past the Kubernetes objects —
 // keys, sign-in, status, usage — is the same as for a self-hosted runtime.
 
+import { logError } from '@/lib/observability'
+
 import { placementNamespace, recordRuntimeController } from './runtime-controllers'
 import { reconcileRuntimeDeletions } from './runtime-deletion'
 import { hostedRuntimeDeploymentObject } from './runtime-deployment'
@@ -24,8 +26,6 @@ import type { RuntimeScheduling } from './runtime-deployment'
 import type { OpenAbProvider } from './runtime-provider'
 import type { ClaudeCodeRuntimeDoc } from './runtime-registry'
 import type { HasActiveRuntimeTurn, RolloutBudget } from './runtime-rollout'
-
-import { logError } from '@/lib/observability'
 
 export type ProvisionerDeps = {
   kube: KubeClient
@@ -59,10 +59,31 @@ async function applyHostedRuntime(runtime: ClaudeCodeRuntimeDoc, deps: Provision
   const authKey = storedAuthKey(runtime.authKeyEnvelope)
 
   if (!name || !authKey) throw new Error('Hosted runtime has no placement or key')
-  const image = await managedRuntimeImage(deps.provider, runtime.requestedRuntimeVersion)
+  // Adopt legacy deployments verbatim: adding a digest also changes the pod template.
+  // Resolve an initial image only when there is no deployment to preserve.
+  if (!runtime.deploymentImage) {
+    if (!deps.kube.getResource) throw new Error('Cannot determine the existing runtime image')
+    const current = await deps.kube.getResource({
+      apiVersion: 'apps/v1',
+      kind: 'Deployment',
+      metadata: { name, namespace: deps.namespace },
+    })
+    const image = current
+      ? current.spec?.template?.spec?.containers?.find((container) => container.name === 'openab')
+          ?.image
+      : await managedRuntimeImage(deps.provider, runtime.requestedRuntimeVersion)
 
-  // The next tick retries. Leaving the live Deployment alone beats rolling it to a guess.
-  if (!image) throw new Error('No published nuphos-runtime release to deploy')
+    if (!image) throw new Error('No runtime image is available')
+    await runtimes().updateOne(
+      { _id: runtime._id, teamId: runtime.teamId, deploymentImage: { $exists: false } },
+      { $set: { deploymentImage: image } },
+    )
+  }
+  // Re-read under the placement lease; a queued tick must not replay an older Update.
+  const selected = await runtimes().findOne({ _id: runtime._id, teamId: runtime.teamId })
+  const image = selected?.deploymentImage
+
+  if (!image) throw new Error('Runtime image selection is unavailable')
   const { teamId, _id: runtimeId } = runtime
 
   await deps.kube.apply(
