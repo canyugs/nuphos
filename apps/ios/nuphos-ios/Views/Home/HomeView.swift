@@ -23,6 +23,11 @@ struct HomeView: View {
                         .environment(store)
                         .environment(plans)
                         .environment(connectors)
+                        // The root content reappears after a pushed chat is
+                        // popped; the enclosing NavigationStack never left.
+                        .onAppear {
+                            Analytics.shared.screen(page.rawValue, teamID: store.selectedTeam?.id)
+                        }
                 } else {
                     Theme.canvas
                 }
@@ -114,7 +119,6 @@ struct HomeView: View {
                 plans = PlansStore(token: token)
                 connectors = ConnectorsStore(token: token)
             }
-            Analytics.shared.screen(page.rawValue, teamID: store?.selectedTeam?.id)
         }
         .onChange(of: page) { oldPage, newPage in
             isSearching = false

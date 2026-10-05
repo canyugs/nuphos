@@ -48,6 +48,21 @@ import PostHog
         analytics.setActive(true)
         precondition(sdk.events.suffix(2).map(\.name) == ["app_active", "$screen"], "Return emits a fresh screen for cross-day DAU")
         precondition(sdk.events.last?.properties["team_id"] as? String == "team-b")
+        // SwiftUI navigation is checked separately on the simulator. Once its
+        // root-content onAppear restores the list, neither foregrounding nor
+        // reopening a chat in the same team may retain/deduplicate the old chat.
+        for page in ["agent", "plans"] {
+            analytics.screen(page, teamID: "team-b")
+            analytics.screen("chat", teamID: "team-b")
+            analytics.screen(page, teamID: "team-b")
+            analytics.setActive(false)
+            analytics.setActive(true)
+            precondition(sdk.events.last?.properties["$screen_name"] as? String == page)
+            let count = sdk.events.count
+            analytics.screen("chat", teamID: "team-b")
+            precondition(sdk.events.count == count + 1)
+            precondition(sdk.events.last?.properties["$screen_name"] as? String == "chat")
+        }
         analytics.track("agent_plan_approved", teamID: "team-a", properties: ["plan_id": "plan-1"])
         precondition(sdk.events.last?.properties["team_id"] as? String == "team-a", "Delayed operations retain their own team")
         precondition(sdk.events.last?.properties["client"] as? String == "nuphos-ios")

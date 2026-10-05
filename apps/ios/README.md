@@ -102,3 +102,14 @@ re-entry, team attribution and Debug/self-hosted isolation without sending any
 production events. The simulator build validates the real SDK integration.
 After release, verify real `$screen` events with `platform=ios`, user identity,
 team ID and the released app version in PostHog before relying on iOS DAU.
+
+Navigation regression: track root screens from `pageContent.onAppear`, not
+`NavigationStack.onAppear` (the stack stays mounted while a chat is pushed).
+With the offline `tests/fixtures/push-responses.json` simulator fixture, open
+chat A, pop to Agent, then open chat B. The actual screen callback sequence
+must be `agent → chat → agent → chat`. Returning to the list and foregrounding
+must retain the list name. Repeat from Plans when a plan-linked chat is present.
+Wrapper tests cover foreground emission and same-team chat re-entry for both
+root names; those tests do not replace checking SwiftUI navigation callbacks.
+The Agent callback sequence was checked on iOS 26.3 using temporary local
+logging before the Debug telemetry gate, without sending production events.
