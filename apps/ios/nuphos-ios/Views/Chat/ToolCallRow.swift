@@ -208,18 +208,13 @@ struct ToolRunView: View {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) { userOpen = !open }
                 } label: {
                     HStack(spacing: 6) {
-                        ToolLineRow.StatusIcon(part: latest)
                         Text(ToolLineRow.label(for: latest))
                             .lineLimit(1)
-                            .foregroundStyle(latest.state == .outputError ? Color.red : Theme.body)
+                            .foregroundStyle(Theme.body)
                             .shimmer(active: !latest.isFinished && latest.state != .approvalRequested)
                         ElapsedBadge(part: latest)
                         if tools.count > 1 {
                             Text("· \(tools.count) calls").foregroundStyle(Theme.muted)
-                        }
-                        let failed = tools.filter { $0.state == .outputError }.count
-                        if failed > 0, latest.state != .outputError {
-                            Text("· \(failed) failed").foregroundStyle(Color.red.opacity(0.8))
                         }
                         Image(systemName: "chevron.right")
                             .font(Theme.Text.micro.weight(.bold))
@@ -275,10 +270,9 @@ struct ToolLineRow: View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: onOpen) {
                 HStack(spacing: 6) {
-                    StatusIcon(part: part)
                     Text(Self.label(for: part))
                         .lineLimit(1)
-                        .foregroundStyle(part.state == .outputError ? Color.red : Theme.body)
+                        .foregroundStyle(Theme.body)
                         .shimmer(active: !part.isFinished && part.state != .approvalRequested)
                     ElapsedBadge(part: part)
                     Spacer(minLength: 0)
@@ -308,22 +302,6 @@ struct ToolLineRow: View {
         if part.state == .outputDenied || part.approval?.approved == false { return "You declined this command." }
         if part.approval?.approved == true { return "You approved this command." }
         return nil
-    }
-
-    /// Terminal glyph for command tools, a red cross on failure, nothing
-    /// otherwise — the desktop's chrome.
-    struct StatusIcon: View {
-        let part: ChatPart.ToolPart
-
-        var body: some View {
-            if part.state == .outputError {
-                Image(systemName: "xmark").font(Theme.Text.micro.weight(.bold)).foregroundStyle(Color.red)
-            } else if part.state == .approvalRequested {
-                Image(systemName: "hand.raised.fill").font(Theme.Text.micro.weight(.semibold)).foregroundStyle(Color.orange)
-            } else if part.isCommandTool {
-                Image(systemName: "terminal").font(Theme.Text.micro.weight(.semibold)).foregroundStyle(Theme.muted)
-            }
-        }
     }
 }
 
@@ -408,22 +386,19 @@ struct WorkGroup: View {
     }
 }
 
-/// "Thinking…" / phase text with bouncing dots while nothing renderable
-/// has arrived yet.
+/// "Thinking…" / phase text, shimmering while the turn runs — the
+/// desktop's `LoadingText`.
 struct ActivityRow: View {
-    let text: String?
+    let text: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let text, !text.isEmpty {
-                Text(text)
-                    .font(Theme.Text.label)
-                    .foregroundStyle(Theme.body)
-                    .contentTransition(.numericText())
-            }
-            ThreeDots(size: 4)
-        }
-        .animation(.snappy, value: text)
+        Text(text)
+            .font(Theme.Text.label)
+            .foregroundStyle(Theme.body)
+            .contentTransition(.numericText())
+            .shimmer(active: true)
+            .animation(.snappy, value: text)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

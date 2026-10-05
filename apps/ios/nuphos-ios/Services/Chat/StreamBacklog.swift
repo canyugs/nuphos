@@ -34,7 +34,19 @@ struct StreamBacklog {
         "atlas-stream-done", "atlas-transcript-snapshot", "error",
     ]
 
+    /// A frame stamped (`emittedAt`) this long before it arrives was written
+    /// before we attached: history the replay is catching up on.
+    static let historyAge: TimeInterval = 2
+    /// The longest history is held while it keeps arriving — a bound for a
+    /// device clock far enough off that live frames look old.
+    static let historyHoldLimit: TimeInterval = 1
+    /// How long history must stop arriving before it lands. Wider than the
+    /// hold window: a replay pauses ~100ms on a large tool output, and a
+    /// split replay shows the turn filling in.
+    static let historyQuiet: TimeInterval = 0.25
+
     private var held: [Frame] = []
+    private var heldSince: Date?
     private var burst = 0
     private var lastFrameAt: Date = .distantPast
     /// When the held frames go in regardless of what else arrives.
@@ -50,6 +62,16 @@ struct StreamBacklog {
         burst = gap < Self.frameGap ? burst + 1 : 0
 
         let frame = Frame(value: value, type: type)
+        // History lands in one piece once it stops arriving, however long the
+        // replay: played back in windows, the transcript re-enacts the turn.
+        // An unstamped frame in the middle of it queues behind it rather than
+        // carrying half of it in.
+        if Self.isHistory(value, at: now) || heldSince != nil, !Self.rendersImmediately.contains(type) {
+            if held.isEmpty { heldSince = now }
+            held.append(frame)
+            deadline = min(now.addingTimeInterval(Self.historyQuiet), (heldSince ?? now).addingTimeInterval(Self.historyHoldLimit))
+            return now >= (deadline ?? now) ? flush() : []
+        }
         if burst >= Self.burstLength, !Self.rendersImmediately.contains(type) {
             if held.isEmpty { deadline = now.addingTimeInterval(Self.holdWindow) }
             held.append(frame)
@@ -68,7 +90,12 @@ struct StreamBacklog {
 
     /// Everything held, for a stream that ended or went quiet.
     mutating func flush() -> [Frame] {
-        defer { held = []; deadline = nil }
+        defer { held = []; deadline = nil; heldSince = nil }
         return held
+    }
+
+    static func isHistory(_ value: JSONValue, at now: Date) -> Bool {
+        guard let ms = value["emittedAt"]?.numberValue else { return false }
+        return now.timeIntervalSince1970 - ms / 1000 > historyAge
     }
 }

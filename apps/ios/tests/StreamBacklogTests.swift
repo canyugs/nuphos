@@ -9,6 +9,9 @@ enum StreamBacklogTests {
         landsHeldFramesWhenTheBurstStops()
         neverHoldsASlowTrickle()
         rendersAFastLiveStreamSteadily()
+        landsReplayedHistoryInOnePiece()
+        boundsHistoryHeldByASkewedClock()
+        keepsUnstampedFramesBehindHistory()
         print("Stream backlog passed")
     }
 
@@ -165,5 +168,68 @@ enum StreamBacklogTests {
 
     private static func text(of message: ChatMessage) -> String {
         message.parts.compactMap { if case .text(let p) = $0 { return p.text } else { return nil } }.joined()
+    }
+
+    private static func stamped(_ text: String, emittedAt: Date) -> JSONValue {
+        .object(["type": .string("text-delta"), "id": .string("t1"), "delta": .string(text), "emittedAt": .number(emittedAt.timeIntervalSince1970 * 1000)])
+    }
+
+    /// Re-attaching to a long turn replays thousands of frames written long
+    /// ago. They must land as one state change, not be played back.
+    private static func landsReplayedHistoryInOnePiece() {
+        var backlog = StreamBacklog()
+        var now = Date()
+        let written = now.addingTimeInterval(-60)
+        for i in 0..<500 {
+            now = now.addingTimeInterval(0.001)
+            let out = backlog.receive(stamped("chunk\(i)", emittedAt: written), type: "text-delta", at: now)
+            precondition(out.isEmpty, "history must not be applied while it is still arriving, frame \(i)")
+        }
+        guard let deadline = backlog.deadline else { preconditionFailure("held history must carry a deadline") }
+        let due = backlog.framesDue(at: deadline)
+        precondition(due.count == 500, "the whole replay lands at once, got \(due.count)")
+
+        // The live head is not history and goes straight in.
+        now = deadline.addingTimeInterval(0.5)
+        let live = backlog.receive(stamped("live", emittedAt: now), type: "text-delta", at: now)
+        precondition(live.count == 1 && !backlog.isHolding, "a live frame goes in on arrival")
+    }
+
+    /// A device clock minutes ahead makes every frame look old. Rendering
+    /// may coarsen, but never stall for longer than the history limit.
+    private static func boundsHistoryHeldByASkewedClock() {
+        var backlog = StreamBacklog()
+        let start = Date()
+        var now = start
+        var applied = 0
+        while now.timeIntervalSince(start) < 3 {
+            now = now.addingTimeInterval(0.03)
+            applied += backlog.receive(stamped("x", emittedAt: now.addingTimeInterval(-300)), type: "text-delta", at: now).count
+            precondition(now.timeIntervalSince(start) < StreamBacklog.historyHoldLimit + 0.1 || applied > 0, "held past the limit")
+        }
+        precondition(applied > 0, "a stream that never pauses still renders")
+    }
+
+    /// Some replayed frames carry no stamp. One arriving mid-replay must not
+    /// release the history held so far, or the turn lands in two halves.
+    private static func keepsUnstampedFramesBehindHistory() {
+        var backlog = StreamBacklog()
+        var now = Date()
+        let written = now.addingTimeInterval(-60)
+        for i in 0..<10 {
+            now = now.addingTimeInterval(0.001)
+            _ = backlog.receive(stamped("old\(i)", emittedAt: written), type: "text-delta", at: now)
+        }
+        now = now.addingTimeInterval(0.001)
+        let unstamped = backlog.receive(delta("plain").0, type: "text-delta", at: now)
+        precondition(unstamped.isEmpty, "an unstamped frame queues behind held history, got \(unstamped.count)")
+        for i in 0..<10 {
+            now = now.addingTimeInterval(0.001)
+            _ = backlog.receive(stamped("more\(i)", emittedAt: written), type: "text-delta", at: now)
+        }
+        guard let deadline = backlog.deadline else { preconditionFailure("held frames must carry a deadline") }
+        let due = backlog.framesDue(at: deadline)
+        precondition(due.count == 21, "the whole replay lands at once, got \(due.count)")
+        precondition(due[10].value["delta"]?.stringValue == "plain", "and keeps its order")
     }
 }
