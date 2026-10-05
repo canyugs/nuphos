@@ -58,6 +58,8 @@ state. Do not run the full fixture suite on a signed-in personal phone.
 ```
 
 Live tests tied to private accounts, device serials, team IDs, screenshots, and
-provisioning scripts are excluded from this contribution. Earlier private-device
+provisioning scripts are excluded from this contribution. Installed-state
+account and Trigger lifecycle acceptance tests are also excluded because they
+require an existing login token. Earlier private-device
 results do not prove that this public checkout passed every live operation.
 Do not place tokens, signing keys, test-account data, or screenshots in Git.
