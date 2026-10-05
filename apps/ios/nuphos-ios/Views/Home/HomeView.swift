@@ -114,10 +114,15 @@ struct HomeView: View {
                 plans = PlansStore(token: token)
                 connectors = ConnectorsStore(token: token)
             }
+            Analytics.shared.screen(page.rawValue, teamID: store?.selectedTeam?.id)
         }
         .onChange(of: page) { oldPage, newPage in
             isSearching = false
             UIEventLog.pageTransition(from: oldPage.rawValue, to: newPage.rawValue)
+            Analytics.shared.screen(newPage.rawValue, teamID: store?.selectedTeam?.id)
+        }
+        .onChange(of: store?.selectedTeam?.id) { _, teamID in
+            Analytics.shared.screen(page.rawValue, teamID: teamID)
         }
         .onChange(of: PushNotifications.shared.pendingTarget, initial: true) { _, target in
             if target != nil { page = .agent }

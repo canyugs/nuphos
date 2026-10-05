@@ -222,6 +222,7 @@ final class AgentStore {
     func select(team: Team) {
         guard team != selectedTeam else { return }
         selectedTeam = team
+        Analytics.shared.track("team_switched", teamID: team.id)
         UserDefaults.standard.set(team.id, forKey: Self.lastTeamKey)
         resetTeamScopedState()
         Task { await reload() }

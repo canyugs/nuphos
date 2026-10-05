@@ -276,7 +276,10 @@ final class ChatSession {
             return
         }
         if transportStreaming && !isNativeRuntime {
-            if !trimmed.isEmpty { queued.append(trimmed) }
+            if !trimmed.isEmpty {
+                queued.append(trimmed)
+                Analytics.shared.track("agent_message_queued", teamID: teamId)
+            }
             return
         }
         var parts: [ChatPart] = []
@@ -332,6 +335,7 @@ final class ChatSession {
         defer { steeringPending = false }
         do {
             let id = try await AgentChatAPI.steer(token: token, teamId: teamId, sessionId: sessionId, text: text)
+            Analytics.shared.track("agent_message_sent", teamID: teamId, properties: ["mode": "steer"])
             if currentStreamId == streamId, messages.last?.id == assistantId {
                 appendSteering(id: id, text: text)
                 lastSubmittedRowID = "steering.\(id)"
@@ -387,6 +391,12 @@ final class ChatSession {
 
     private func dispatch(_ message: ChatMessage, title text: String, submission: ComposerSubmission? = nil) async {
         let wasEmpty = messages.isEmpty
+        // Send intent, matching Desktop; this is not a successful agent outcome.
+        Analytics.shared.track("agent_message_sent", teamID: teamId, properties: [
+            "attachment_count": submission?.attachments.count ?? 0,
+            "mode": "send",
+        ])
+        if wasEmpty { Analytics.shared.track("agent_chat_started", teamID: teamId) }
         if !isNativeRuntime, let i = messages.lastIndex(where: { $0.role == .assistant }) {
             messages[i].supersedePendingApprovals()
             messages[i].finalizeIncompleteTools()
@@ -462,6 +472,7 @@ final class ChatSession {
     /// Approve → if the quorum is met, tell the agent to proceed.
     func approvePlan(_ planId: String) async throws -> Plan {
         let updated = try await AgentChatAPI.updatePlan(token: token, teamId: teamId, planId: planId, status: "approved")
+        Analytics.shared.track("agent_plan_approved", teamID: teamId, properties: ["plan_id": planId])
         if updated.status == "approved" {
             send("Approved plan #\(planId) — please proceed with plan #\(planId).")
         }
@@ -470,6 +481,7 @@ final class ChatSession {
 
     func rejectPlan(_ planId: String) async throws -> Plan {
         let updated = try await AgentChatAPI.updatePlan(token: token, teamId: teamId, planId: planId, status: "rejected")
+        Analytics.shared.track("agent_plan_rejected", teamID: teamId, properties: ["plan_id": planId])
         send("Rejected the plan — discard it and stop.")
         return updated
     }
