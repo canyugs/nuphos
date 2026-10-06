@@ -140,18 +140,18 @@ class AccountParityFixtureDeviceTest {
                         if (!validEmailBody) unexpected += read
                         """{"ok":true}"""
                     }
-                    request.method == "GET" && path == "/teams" -> if (draftNavigation) """{"teams":[{"id":"draft-team","name":"Draft fixture"},{"id":"draft-other","name":"Other draft fixture"}]}""" else if (draftTeam) """{"teams":[{"id":"draft-team","name":"Draft fixture"}]}""" else """{"teams":[]}"""
-                    draftTeam && request.method == "GET" && path == "/teams/draft-team/connectors" -> """{"aws":[],"gcp":[],"cloudflare":[],"linode":[],"hetzner":[],"tencent":[],"aliyun":[],"volcengine":[],"azure":[],"huawei":[],"vanta":[],"secureframe":[],"sonarqube":[],"notion":[],"onprem":[],"upstash":[],"resend":[],"posthog":[],"betterstack":[],"uptimeKuma":[],"tailscale":[],"zeabur":[],"github":[],"gitlab":[],"grafana":[],"linear":[],"jira":[],"asana":[],"sentry":[]}"""
-                    draftTeam && request.method == "GET" && path == "/teams/draft-team/members" -> """{"members":[]}"""
-                    draftTeam && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "draft-team" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
-                    request.method == "GET" && path == "/teams/draft-team/favorites" -> """{"entries":[],"revision":0}"""
-                    draftNavigation && request.method == "GET" && path == "/agent/conversations" && request.url.queryParameter("teamId") == "draft-team" -> """{"conversations":[{"sessionId":"draft-one","teamId":"draft-team","title":"Draft chat one","isOwner":true},{"sessionId":"draft-two","teamId":"draft-team","title":"Draft chat two","isOwner":true}]}"""
-                    draftNavigation && request.method == "GET" && path in setOf("/agent/conversations/draft-one", "/agent/conversations/draft-two") && request.url.queryParameter("teamId") == "draft-team" -> """{"messages":[],"isOwner":true,"readOnly":false,"title":"${if (path.endsWith("draft-one")) "Draft chat one" else "Draft chat two"}"}"""
+                    request.method == "GET" && path == "/teams" -> if (draftNavigation) """{"teams":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaa","name":"Draft fixture"},{"id":"bbbbbbbbbbbbbbbbbbbbbbbb","name":"Other draft fixture"}]}""" else if (draftTeam) """{"teams":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaa","name":"Draft fixture"}]}""" else """{"teams":[]}"""
+                    draftTeam && request.method == "GET" && path == "/teams/aaaaaaaaaaaaaaaaaaaaaaaa/connectors" -> """{"aws":[],"gcp":[],"cloudflare":[],"linode":[],"hetzner":[],"tencent":[],"aliyun":[],"volcengine":[],"azure":[],"huawei":[],"vanta":[],"secureframe":[],"sonarqube":[],"notion":[],"onprem":[],"upstash":[],"resend":[],"posthog":[],"betterstack":[],"uptimeKuma":[],"tailscale":[],"zeabur":[],"github":[],"gitlab":[],"grafana":[],"linear":[],"jira":[],"asana":[],"sentry":[]}"""
+                    draftTeam && request.method == "GET" && path == "/teams/aaaaaaaaaaaaaaaaaaaaaaaa/members" -> """{"members":[]}"""
+                    draftTeam && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "aaaaaaaaaaaaaaaaaaaaaaaa" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
+                    request.method == "GET" && path == "/teams/aaaaaaaaaaaaaaaaaaaaaaaa/favorites" -> """{"entries":[],"revision":0}"""
+                    draftNavigation && request.method == "GET" && path == "/agent/conversations" && request.url.queryParameter("teamId") == "aaaaaaaaaaaaaaaaaaaaaaaa" -> """{"conversations":[{"sessionId":"draft-one","teamId":"aaaaaaaaaaaaaaaaaaaaaaaa","title":"Draft chat one","isOwner":true},{"sessionId":"draft-two","teamId":"aaaaaaaaaaaaaaaaaaaaaaaa","title":"Draft chat two","isOwner":true}]}"""
+                    draftNavigation && request.method == "GET" && path in setOf("/agent/conversations/draft-one", "/agent/conversations/draft-two") && request.url.queryParameter("teamId") == "aaaaaaaaaaaaaaaaaaaaaaaa" -> """{"messages":[],"isOwner":true,"readOnly":false,"title":"${if (path.endsWith("draft-one")) "Draft chat one" else "Draft chat two"}"}"""
                     draftNavigation && request.method == "GET" && path == "/agent/auto-mode/bypass" && request.url.queryParameter("sessionId") in setOf("draft-one", "draft-two") -> """{"bypass":false}"""
-                    draftNavigation && request.method == "GET" && path == "/teams/draft-other/favorites" -> """{"entries":[],"revision":0}"""
-                    draftNavigation && request.method == "GET" && path == "/teams/draft-other/connectors" -> """{}"""
-                    draftNavigation && request.method == "GET" && path == "/teams/draft-other/members" -> """{"members":[]}"""
-                    draftNavigation && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "draft-other" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
+                    draftNavigation && request.method == "GET" && path == "/teams/bbbbbbbbbbbbbbbbbbbbbbbb/favorites" -> """{"entries":[],"revision":0}"""
+                    draftNavigation && request.method == "GET" && path == "/teams/bbbbbbbbbbbbbbbbbbbbbbbb/connectors" -> """{}"""
+                    draftNavigation && request.method == "GET" && path == "/teams/bbbbbbbbbbbbbbbbbbbbbbbb/members" -> """{"members":[]}"""
+                    draftNavigation && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "bbbbbbbbbbbbbbbbbbbbbbbb" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
                     request.method == "GET" && path == "/agent/conversations" -> """{"conversations":[]}"""
                     request.method == "GET" && path == "/agent/plans" -> """{"plans":[]}"""
                     else -> { unexpected += read; status = 599; "{}" }
@@ -239,7 +239,7 @@ class AccountParityFixtureDeviceTest {
         val auth = app.authSession
         val generation = auth.generation
         val destination = ai.nuphos.android.session.ComposerDrafts.Destination.NewChat
-        val lease = auth.composerDrafts.bind(requireNotNull(auth.user).id, "draft-team", destination)!!
+        val lease = auth.composerDrafts.bind(requireNotNull(auth.user).id, "aaaaaaaaaaaaaaaaaaaaaaaa", destination)!!
         compose.activityRule.scenario.recreate()
         compose.waitUntil(8_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Ask Nuphos anything").assertTextEquals(text)
@@ -251,7 +251,7 @@ class AccountParityFixtureDeviceTest {
         awaitText("Before you use AI agents")
         assertEquals("", lease.text)
         assertFalse(lease.write("late private text"))
-        assertEquals("", auth.composerDrafts.bind(requireNotNull(auth.user).id, "draft-team", destination)!!.text)
+        assertEquals("", auth.composerDrafts.bind(requireNotNull(auth.user).id, "aaaaaaaaaaaaaaaaaaaaaaaa", destination)!!.text)
     }
 
     @Test fun actualChatNavigationKeepsTwoChatsAndNewChatIsolatedAcrossTeams() {
@@ -306,15 +306,15 @@ class AccountParityFixtureDeviceTest {
             backToHistory()
             // No native workspace picker exists in this baseline. Drive its existing store
             // selection hook with an authorized fixture team, then verify real composer UI.
-            compose.runOnIdle { agent.select(agent.teams.single { it.id == "draft-other" }) }
-            compose.waitUntil(8_000) { agent.selectedTeam?.id == "draft-other" && agent.phase == ai.nuphos.android.session.AgentStore.Phase.Loaded }
+            compose.runOnIdle { agent.select(agent.teams.single { it.id == "bbbbbbbbbbbbbbbbbbbbbbbb" }) }
+            compose.waitUntil(8_000) { agent.selectedTeam?.id == "bbbbbbbbbbbbbbbbbbbbbbbb" && agent.phase == ai.nuphos.android.session.AgentStore.Phase.Loaded }
             input().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
             input().performTextReplacement(" other team ")
-            compose.runOnIdle { agent.select(agent.teams.single { it.id == "draft-team" }) }
+            compose.runOnIdle { agent.select(agent.teams.single { it.id == "aaaaaaaaaaaaaaaaaaaaaaaa" }) }
             awaitText("Draft chat one")
             input().assertTextEquals(" new first team ")
-            compose.runOnIdle { agent.select(agent.teams.single { it.id == "draft-other" }) }
-            compose.waitUntil(8_000) { agent.selectedTeam?.id == "draft-other" && agent.phase == ai.nuphos.android.session.AgentStore.Phase.Loaded }
+            compose.runOnIdle { agent.select(agent.teams.single { it.id == "bbbbbbbbbbbbbbbbbbbbbbbb" }) }
+            compose.waitUntil(8_000) { agent.selectedTeam?.id == "bbbbbbbbbbbbbbbbbbbbbbbb" && agent.phase == ai.nuphos.android.session.AgentStore.Phase.Loaded }
             input().assertTextEquals(" other team ")
         } finally {
             // Restore only the preference this fixture's explicit selection wrote.
@@ -331,8 +331,8 @@ class AccountParityFixtureDeviceTest {
         val token = requireNotNull(app.authSession.token)
         val account = requireNotNull(app.authSession.user).id
         val destination = ai.nuphos.android.session.ComposerDrafts.Destination.NewChat
-        val draft = app.authSession.composerDrafts.bind(account, "draft-team", destination)!!
-        val other = app.authSession.composerDrafts.bind(account, "draft-team", ai.nuphos.android.session.ComposerDrafts.Destination.Chat("other"))!!
+        val draft = app.authSession.composerDrafts.bind(account, "aaaaaaaaaaaaaaaaaaaaaaaa", destination)!!
+        val other = app.authSession.composerDrafts.bind(account, "aaaaaaaaaaaaaaaaaaaaaaaa", ai.nuphos.android.session.ComposerDrafts.Destination.Chat("other"))!!
         val enabled = androidx.compose.runtime.mutableStateOf(false)
         val accepts = androidx.compose.runtime.mutableStateOf(false)
         val rejected = androidx.compose.runtime.mutableStateOf<ai.nuphos.android.model.ComposerSubmission?>(null)

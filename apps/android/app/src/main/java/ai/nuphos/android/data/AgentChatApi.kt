@@ -26,6 +26,8 @@ object AgentChatApi {
         val permissionMode: String? = null,
         val credentialAccess: JsonValue? = null,
         val clientCapabilities: Map<String, Boolean>? = null,
+        val runtimeId: String? = null,
+        val agentRuntime: String? = null,
     )
 
     fun chatRequest(token: String, body: ChatRequest): Request {
@@ -56,6 +58,8 @@ object AgentChatApi {
         val permissionMode: String? = null,
         val credentialAccess: JsonValue? = null,
         val clientCapabilities: Map<String, Boolean>? = null,
+        val runtimeId: String? = null,
+        val agentRuntime: String? = null,
     ) {
         companion object {
             fun from(body: ChatRequest) = ChatRequestBody(
@@ -71,6 +75,8 @@ object AgentChatApi {
                 permissionMode = body.permissionMode,
                 credentialAccess = body.credentialAccess,
                 clientCapabilities = body.clientCapabilities,
+                runtimeId = body.runtimeId,
+                agentRuntime = body.agentRuntime,
             )
         }
     }

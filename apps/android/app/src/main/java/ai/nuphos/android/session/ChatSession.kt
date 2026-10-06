@@ -44,8 +44,11 @@ class ChatSession(
     val browsingOnly: Boolean = false,
     private val readDetail: suspend (String, String, String) -> AgentConversationDetail = NuphosApi::conversationDetail,
     private val aiAllowed: () -> Boolean = AiAccess.bind(token),
+    val creationRuntimeBinding: ai.nuphos.android.data.RuntimeBinding? = null,
     private val steerRuntime: suspend (String, String, String, String) -> String = RuntimeApi::steer,
 ) {
+    private var serverMetadataObserved = false
+    val outgoingCreationBinding get() = creationRuntimeBinding.takeUnless { serverMetadataObserved }
     var title by mutableStateOf(title)
         private set
     var messages by mutableStateOf(listOf<ChatMessage>())
@@ -632,6 +635,7 @@ class ChatSession(
         isOwner = detail.isOwner ?: false
         canCancelRun = detail.canCancelRun ?: false
         canRespondToRun = detail.canRespondToRun ?: false
+        serverMetadataObserved = true
         agentRuntime = detail.agentRuntime
         detail.runtimeState?.let { receiveRuntime(it, observedAt) }
         detail.title?.takeIf { it.isNotEmpty() }?.let { title = it }
@@ -893,6 +897,8 @@ class ChatSession(
                 permissionMode = options.permissionMode,
                 credentialAccess = credentialAccess?.json,
                 clientCapabilities = mapOf("localTools" to false),
+                runtimeId = if (shouldResume == true) null else outgoingCreationBinding?.runtimeId,
+                agentRuntime = if (shouldResume == true) null else outgoingCreationBinding?.agentRuntime,
             )
             var needsFreshRetry = false
             var terminal = false
@@ -1290,7 +1296,7 @@ class ChatSession(
         private const val TAG = "nuphos.chat"
         private val GATEWAY = setOf(502, 503, 504, 520, 521, 522, 523, 524)
 
-        fun fresh(token: String, teamId: String) = ChatSession(token, teamId).also { it.loaded = true }
+        fun fresh(token: String, teamId: String, binding: ai.nuphos.android.data.RuntimeBinding? = null) = ChatSession(token, teamId, creationRuntimeBinding = binding).also { it.loaded = true }
 
         fun phaseLabel(phase: String?): String? = when (phase) {
             "request-accepted" -> "Starting…"

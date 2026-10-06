@@ -67,6 +67,26 @@ fun AgentPage(
     val store = LocalAgentStore.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val auth = ai.nuphos.android.ui.LocalAuthSession.current
+    val account = auth.user?.id
+    val team = store.selectedTeam
+    val revision = store.workspaceRevision
+    val consentRevision = ai.nuphos.android.session.AiAccess.revision
+    val authGeneration = auth.generation
+    val selection = remember(account, team?.id, authGeneration, consentRevision) {
+        if (account != null && team != null && auth.aiAllowed) auth.runtimeSelections.bind(account, team.id) else null
+    }
+    var setupVisible by remember { mutableStateOf(false) }
+    val setup = remember(account, team, revision, consentRevision, authGeneration, selection) {
+        if (team != null && selection != null && auth.token != null) ai.nuphos.android.session.RuntimeSetupStore(
+            ai.nuphos.android.data.AgentRuntimeApi(auth.token!!, team.id), scope,
+            { auth.generation == authGeneration && auth.user?.id == account && auth.aiAllowed &&
+                ai.nuphos.android.session.AiAccess.revision == consentRevision && store.workspaceRevision == revision && store.selectedTeam == team },
+            { store.selectedTeam == team && store.selectedTeam?.isAdministrator == true }, selection,
+            { if (auth.generation == authGeneration && auth.user?.id == account) auth.signOut(ai.nuphos.android.data.NuphosApi.Failure.Unauthorized.message) }) else null
+    }
+    LaunchedEffect(setup) { setupVisible = false }
+    if (setupVisible && setup != null && setup.isSourceCurrent()) RuntimeSetupSheet(setup, { setupVisible = false })
 
     var statusClock by remember(store) { mutableStateOf(RuntimeObservation.now()) }
     LaunchedEffect(store, store.historyRevision, store.conversations, statusClock) {
@@ -86,6 +106,10 @@ fun AgentPage(
     }
 
     Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(horizontal = 16.dp)) {
+            Button(onClick = { setupVisible = true }, enabled = setup != null && auth.aiAllowed) { Text("Choose or set up an Agent") }
+        }
+        if (selection?.reselectionRequired == true) Text("Select an available Agent before starting a new chat.", Modifier.padding(horizontal = 16.dp))
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = !store.archivedOnly, onClick = { store.updateArchivedOnly(false) }, label = { Text("Active") })
             FilterChip(selected = store.archivedOnly, onClick = { store.updateArchivedOnly(true) }, label = { Text("Archived") })
@@ -189,7 +213,7 @@ fun AgentPage(
             draftingEnabled = draft != null && draftAuth.aiAllowed && store.selectedTeam != null,
             isStreaming = false,
             onSend = { submission ->
-                val session = store.newSession() ?: return@ChatComposer false
+                val session = store.newSession(selection) ?: return@ChatComposer false
                 store.pendingPrompt = submission
                 nav.navigate("conversation/${session.sessionId}?fresh=true")
                 true

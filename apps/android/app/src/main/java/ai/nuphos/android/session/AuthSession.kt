@@ -55,12 +55,14 @@ class AuthSession(
         private set
     val aiAllowed: Boolean get() = token?.let { AiAccess.allows(it) } == true
     val composerDrafts = ComposerDrafts()
+    val runtimeSelections = RuntimeSelections()
     var workspaceWriteReview = WorkspaceWriteReview()
         private set
     private var consentRequest = 0L
 
     private fun beginIdentity(): Long {
         composerDrafts.onIdentity(null)
+        runtimeSelections.clear()
         workspaceWriteReview = WorkspaceWriteReview()
         generation++
         consentRequest++
@@ -99,6 +101,7 @@ class AuthSession(
                     }
                 } else {
                     composerDrafts.clear()
+                    runtimeSelections.clear()
                     AiAccess.revoke()
                     if (result.version != AccountApi.AI_CONSENT_VERSION) {
                         consentError = "This privacy notice has changed. Please update Nuphos before using AI."
@@ -144,6 +147,7 @@ class AuthSession(
                         }
                     } else {
                         composerDrafts.clear()
+                        runtimeSelections.clear()
                         AiAccess.revokeIfCurrent(current, revision)
                     }
                 } else {

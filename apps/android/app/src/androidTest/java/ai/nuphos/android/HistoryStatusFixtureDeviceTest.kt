@@ -144,6 +144,7 @@ class HistoryStatusFixtureDeviceTest {
             AiAccess.grant(token)
             store = AgentStore(token, compose.activity)
             state(store, "selectedTeam").value = Team("A", "Fixture A")
+            store.acceptMemberships(listOf(Team("A", "Fixture A"), Team("B", "Fixture B")))
             state(store, "phase").value = AgentStore.Phase.Idle
             auth = AuthSession(app, app.tokenStore)
             AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(auth, token)

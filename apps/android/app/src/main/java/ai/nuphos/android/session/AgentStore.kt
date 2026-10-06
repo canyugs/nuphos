@@ -276,7 +276,10 @@ class AgentStore(
                 clearFavorites()
                 credentialCatalog = null
                 restoreCredentialSelection()
-            } else selectedTeam = refreshed
+            } else {
+                if (refreshed != old) workspaceRevision++
+                selectedTeam = refreshed
+            }
         }
         if (verified != null) select(verified)
         return true
@@ -388,9 +391,10 @@ class AgentStore(
         }
     }
 
-    fun newSession(): ChatSession? {
+    fun newSession(selection: RuntimeSelections.Selection? = null): ChatSession? {
         val team = selectedTeam ?: return null
-        val session = ChatSession.fresh(token, team.id)
+        if (selection != null && (!selection.valid || selection.teamId != team.id || selection.reselectionRequired)) return null
+        val session = ChatSession.fresh(token, team.id, selection?.binding)
         session.presetPermissionMode(permissionMode)
         session.credentialAccess = if (credentialSelection.isEmpty) null else credentialSelection
         sessions[SessionKey(team.id, session.sessionId)] = session
