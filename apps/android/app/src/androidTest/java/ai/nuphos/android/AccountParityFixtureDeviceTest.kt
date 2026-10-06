@@ -44,6 +44,7 @@ class AccountParityFixtureDeviceTest {
     @Volatile private var consentReadMode = "valid"
     @Volatile private var rejectConsentWrite = false
     @Volatile private var draftTeam = false
+    @Volatile private var draftNavigation = false
     @Volatile private var accepted = false
     @Volatile private var failStatus = false
     @Volatile private var ambiguousSubmission = false
@@ -139,11 +140,18 @@ class AccountParityFixtureDeviceTest {
                         if (!validEmailBody) unexpected += read
                         """{"ok":true}"""
                     }
-                    request.method == "GET" && path == "/teams" -> if (draftTeam) """{"teams":[{"id":"draft-team","name":"Draft fixture"}]}""" else """{"teams":[]}"""
+                    request.method == "GET" && path == "/teams" -> if (draftNavigation) """{"teams":[{"id":"draft-team","name":"Draft fixture"},{"id":"draft-other","name":"Other draft fixture"}]}""" else if (draftTeam) """{"teams":[{"id":"draft-team","name":"Draft fixture"}]}""" else """{"teams":[]}"""
                     draftTeam && request.method == "GET" && path == "/teams/draft-team/connectors" -> """{"aws":[],"gcp":[],"cloudflare":[],"linode":[],"hetzner":[],"tencent":[],"aliyun":[],"volcengine":[],"azure":[],"huawei":[],"vanta":[],"secureframe":[],"sonarqube":[],"notion":[],"onprem":[],"upstash":[],"resend":[],"posthog":[],"betterstack":[],"uptimeKuma":[],"tailscale":[],"zeabur":[],"github":[],"gitlab":[],"grafana":[],"linear":[],"jira":[],"asana":[],"sentry":[]}"""
                     draftTeam && request.method == "GET" && path == "/teams/draft-team/members" -> """{"members":[]}"""
                     draftTeam && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "draft-team" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
                     request.method == "GET" && path == "/teams/draft-team/favorites" -> """{"entries":[],"revision":0}"""
+                    draftNavigation && request.method == "GET" && path == "/agent/conversations" && request.url.queryParameter("teamId") == "draft-team" -> """{"conversations":[{"sessionId":"draft-one","teamId":"draft-team","title":"Draft chat one","isOwner":true},{"sessionId":"draft-two","teamId":"draft-team","title":"Draft chat two","isOwner":true}]}"""
+                    draftNavigation && request.method == "GET" && path in setOf("/agent/conversations/draft-one", "/agent/conversations/draft-two") && request.url.queryParameter("teamId") == "draft-team" -> """{"messages":[],"isOwner":true,"readOnly":false,"title":"${if (path.endsWith("draft-one")) "Draft chat one" else "Draft chat two"}"}"""
+                    draftNavigation && request.method == "GET" && path == "/agent/auto-mode/bypass" && request.url.queryParameter("sessionId") in setOf("draft-one", "draft-two") -> """{"bypass":false}"""
+                    draftNavigation && request.method == "GET" && path == "/teams/draft-other/favorites" -> """{"entries":[],"revision":0}"""
+                    draftNavigation && request.method == "GET" && path == "/teams/draft-other/connectors" -> """{}"""
+                    draftNavigation && request.method == "GET" && path == "/teams/draft-other/members" -> """{"members":[]}"""
+                    draftNavigation && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "draft-other" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
                     request.method == "GET" && path == "/agent/conversations" -> """{"conversations":[]}"""
                     request.method == "GET" && path == "/agent/plans" -> """{"plans":[]}"""
                     else -> { unexpected += read; status = 599; "{}" }
@@ -244,6 +252,132 @@ class AccountParityFixtureDeviceTest {
         assertEquals("", lease.text)
         assertFalse(lease.write("late private text"))
         assertEquals("", auth.composerDrafts.bind(requireNotNull(auth.user).id, "draft-team", destination)!!.text)
+    }
+
+    @Test fun actualChatNavigationKeepsTwoChatsAndNewChatIsolatedAcrossTeams() {
+        draftTeam = true
+        draftNavigation = true
+        awaitText("Before you use AI agents")
+        tap("Agree and continue")
+        awaitText("Draft chat one")
+        val token = requireNotNull(app.authSession.token)
+        lateinit var agent: ai.nuphos.android.session.AgentStore
+        compose.runOnIdle {
+            compose.activity.setContent {
+                androidx.compose.runtime.CompositionLocalProvider(ai.nuphos.android.ui.LocalAuthSession provides app.authSession) {
+                    ai.nuphos.android.ui.SignedInHost(requireNotNull(app.authSession.user), token) { _, context ->
+                        ai.nuphos.android.session.AgentStore(token, context).also { agent = it }
+                    }
+                }
+            }
+        }
+        awaitText("Draft chat one")
+        fun input() = compose.onNodeWithContentDescription("Ask Nuphos anything")
+        fun backToHistory() {
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.waitUntil(8_000) { compose.onAllNodesWithText("Draft chat one", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        }
+        fun openChat(title: String) {
+            // On the small API 33 screen, expanded text and the IME can cover a row.
+            val collapse = compose.onAllNodesWithContentDescription("Collapse composer")
+            if (collapse.fetchSemanticsNodes().isNotEmpty()) collapse.onFirst().performClick()
+            compose.runOnIdle { compose.activity.window.insetsController?.hide(android.view.WindowInsets.Type.ime()) }
+            compose.waitUntil(8_000) { compose.onAllNodesWithText(title, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(title, useUnmergedTree = true).performScrollTo().performClick()
+            compose.waitUntil(8_000) { compose.onAllNodesWithContentDescription("Back").fetchSemanticsNodes().isNotEmpty() }
+        }
+        try {
+            input().performTextReplacement(" new first team ")
+            openChat("Draft chat one")
+            compose.waitUntil(8_000) { count("GET", "/agent/conversations/draft-one") > 0 }
+            input().performTextReplacement("  A\n ")
+            backToHistory()
+            input().assertTextEquals(" new first team ")
+            openChat("Draft chat two")
+            compose.waitUntil(8_000) { count("GET", "/agent/conversations/draft-two") > 0 }
+            input().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+            input().performTextReplacement(" B ")
+            backToHistory()
+            openChat("Draft chat one")
+            input().assertTextEquals("  A\n ")
+            backToHistory()
+            openChat("Draft chat two")
+            input().assertTextEquals(" B ")
+            backToHistory()
+            // No native workspace picker exists in this baseline. Drive its existing store
+            // selection hook with an authorized fixture team, then verify real composer UI.
+            compose.runOnIdle { agent.select(agent.teams.single { it.id == "draft-other" }) }
+            compose.waitUntil(8_000) { agent.selectedTeam?.id == "draft-other" && agent.phase == ai.nuphos.android.session.AgentStore.Phase.Loaded }
+            input().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+            input().performTextReplacement(" other team ")
+            compose.runOnIdle { agent.select(agent.teams.single { it.id == "draft-team" }) }
+            awaitText("Draft chat one")
+            input().assertTextEquals(" new first team ")
+            compose.runOnIdle { agent.select(agent.teams.single { it.id == "draft-other" }) }
+            compose.waitUntil(8_000) { agent.selectedTeam?.id == "draft-other" && agent.phase == ai.nuphos.android.session.AgentStore.Phase.Loaded }
+            input().assertTextEquals(" other team ")
+        } finally {
+            // Restore only the preference this fixture's explicit selection wrote.
+            val prefs = app.getSharedPreferences("nuphos.prefs", Context.MODE_PRIVATE)
+            val key = "nuphos.workspace.lastTeamId"
+            val previous = preferences[key] as String?
+            prefs.edit().apply { if (previous == null) remove(key) else putString(key, previous) }.commit()
+        }
+    }
+
+    @Test fun composerDisabledFalseRejectedAndAcceptedSubmitKeepCorrectTextOwnership() {
+        awaitText("Before you use AI agents")
+        compose.waitUntil(8_000) { !app.authSession.consentBusy }
+        val token = requireNotNull(app.authSession.token)
+        val account = requireNotNull(app.authSession.user).id
+        val destination = ai.nuphos.android.session.ComposerDrafts.Destination.NewChat
+        val draft = app.authSession.composerDrafts.bind(account, "draft-team", destination)!!
+        val other = app.authSession.composerDrafts.bind(account, "draft-team", ai.nuphos.android.session.ComposerDrafts.Destination.Chat("other"))!!
+        val enabled = androidx.compose.runtime.mutableStateOf(false)
+        val accepts = androidx.compose.runtime.mutableStateOf(false)
+        val rejected = androidx.compose.runtime.mutableStateOf<ai.nuphos.android.model.ComposerSubmission?>(null)
+        val visible = androidx.compose.runtime.mutableStateOf(true)
+        var attempts = 0
+        var restored = 0
+        compose.runOnIdle {
+            AiAccess.grant(token)
+            other.write("unrelated")
+            val agent = ai.nuphos.android.session.AgentStore(token, app)
+            compose.activity.setContent {
+                ai.nuphos.android.ui.theme.NuphosTheme {
+                    androidx.compose.runtime.CompositionLocalProvider(ai.nuphos.android.ui.LocalAgentStore provides agent) {
+                        if (visible.value) ai.nuphos.android.ui.chat.ChatComposer(
+                            isStreaming = false, draft = draft, canSubmit = enabled.value,
+                            onSend = { attempts++; accepts.value }, rejectedSubmission = rejected.value,
+                            onRejectedRestored = { restored++; rejected.value = null },
+                        )
+                    }
+                }
+            }
+        }
+        fun input() = compose.onNodeWithContentDescription("Ask Nuphos anything")
+        input().performTextReplacement("  unsent\n ")
+        compose.onNodeWithContentDescription("Send").performClick()
+        input().assertTextEquals("  unsent\n ")
+        assertEquals(0, attempts)
+        compose.runOnIdle { enabled.value = true }
+        compose.onNodeWithContentDescription("Send").performClick()
+        input().assertTextEquals("  unsent\n ")
+        assertEquals(1, attempts)
+        compose.runOnIdle { accepts.value = true }
+        compose.onNodeWithContentDescription("Send").performClick()
+        input().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        assertEquals(2, attempts)
+        assertEquals("unrelated", other.text)
+        compose.runOnIdle { visible.value = false }
+        compose.waitForIdle()
+        compose.runOnIdle { visible.value = true }
+        input().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        compose.runOnIdle { rejected.value = ai.nuphos.android.model.ComposerSubmission(" rejected text ") }
+        compose.waitUntil(8_000) { restored == 1 }
+        input().assertTextEquals(" rejected text ")
+        assertEquals(" rejected text ", draft.text)
+        assertEquals("unrelated", other.text)
     }
 
     @Test fun declinedAccountAllowsProfileCancelAndConflictThenExplicitAgreeAndWithdraw() {
