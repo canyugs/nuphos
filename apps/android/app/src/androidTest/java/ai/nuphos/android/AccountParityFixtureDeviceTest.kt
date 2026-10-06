@@ -43,6 +43,7 @@ class AccountParityFixtureDeviceTest {
     private var preferences: Map<String, *> = emptyMap<String, Any>()
     @Volatile private var consentReadMode = "valid"
     @Volatile private var rejectConsentWrite = false
+    @Volatile private var draftTeam = false
     @Volatile private var accepted = false
     @Volatile private var failStatus = false
     @Volatile private var ambiguousSubmission = false
@@ -138,7 +139,11 @@ class AccountParityFixtureDeviceTest {
                         if (!validEmailBody) unexpected += read
                         """{"ok":true}"""
                     }
-                    request.method == "GET" && path == "/teams" -> """{"teams":[]}"""
+                    request.method == "GET" && path == "/teams" -> if (draftTeam) """{"teams":[{"id":"draft-team","name":"Draft fixture"}]}""" else """{"teams":[]}"""
+                    draftTeam && request.method == "GET" && path == "/teams/draft-team/connectors" -> """{"aws":[],"gcp":[],"cloudflare":[],"linode":[],"hetzner":[],"tencent":[],"aliyun":[],"volcengine":[],"azure":[],"huawei":[],"vanta":[],"secureframe":[],"sonarqube":[],"notion":[],"onprem":[],"upstash":[],"resend":[],"posthog":[],"betterstack":[],"uptimeKuma":[],"tailscale":[],"zeabur":[],"github":[],"gitlab":[],"grafana":[],"linear":[],"jira":[],"asana":[],"sentry":[]}"""
+                    draftTeam && request.method == "GET" && path == "/teams/draft-team/members" -> """{"members":[]}"""
+                    draftTeam && request.method == "GET" && path == "/agent/plan-approval-policy" && request.url.queryParameter("teamId") == "draft-team" -> """{"requesterApprovalRequired":true,"minimumOtherApprovals":0}"""
+                    request.method == "GET" && path == "/teams/draft-team/favorites" -> """{"entries":[],"revision":0}"""
                     request.method == "GET" && path == "/agent/conversations" -> """{"conversations":[]}"""
                     request.method == "GET" && path == "/agent/plans" -> """{"plans":[]}"""
                     else -> { unexpected += read; status = 599; "{}" }
@@ -215,6 +220,31 @@ class AccountParityFixtureDeviceTest {
     private fun deletion() { account(); tap("Account deletion request"); awaitText("Request permanent deletion") }
     private fun enter(label: String, value: String) = compose.onNodeWithText(label).performScrollTo().performTextReplacement(value)
     private fun submits() = count("POST", "/auth/account-deletion")
+
+    @Test fun rootActivityRecreationRetainsTextAndConfirmedWithdrawalFencesOldComposer() {
+        draftTeam = true
+        awaitText("Before you use AI agents")
+        tap("Agree and continue")
+        compose.waitUntil(8_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().isNotEmpty() }
+        val text = "  activity draft\n  "
+        compose.onNodeWithContentDescription("Ask Nuphos anything").performTextReplacement(text)
+        val auth = app.authSession
+        val generation = auth.generation
+        val destination = ai.nuphos.android.session.ComposerDrafts.Destination.NewChat
+        val lease = auth.composerDrafts.bind(requireNotNull(auth.user).id, "draft-team", destination)!!
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(8_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Ask Nuphos anything").assertTextEquals(text)
+        assertSame(auth, (compose.activity.application as NuphosApplication).authSession)
+        assertEquals(generation, auth.generation)
+        compose.onNodeWithContentDescription("Profile").performClick()
+        tap("Withdraw AI sharing consent")
+        compose.onNodeWithText("Withdraw").performClick()
+        awaitText("Before you use AI agents")
+        assertEquals("", lease.text)
+        assertFalse(lease.write("late private text"))
+        assertEquals("", auth.composerDrafts.bind(requireNotNull(auth.user).id, "draft-team", destination)!!.text)
+    }
 
     @Test fun declinedAccountAllowsProfileCancelAndConflictThenExplicitAgreeAndWithdraw() {
         account()

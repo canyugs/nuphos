@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -132,7 +133,15 @@ fun AgentPage(
                 }
             }
         }
+        val draftAuth = ai.nuphos.android.ui.LocalAuthSession.current
+        val draftAccount = draftAuth.user?.id
+        val draftTeam = store.selectedTeam?.id
+        val draft = remember(draftAccount, draftTeam, draftAuth.generation, ai.nuphos.android.session.AiAccess.revision) {
+            draftAccount?.let { draftAuth.composerDrafts.bind(it, draftTeam, ai.nuphos.android.session.ComposerDrafts.Destination.NewChat, ai.nuphos.android.session.AiAccess.bind(draftAuth.token.orEmpty())) }
+        }
         ChatComposer(
+            draft = draft,
+            draftingEnabled = draft != null && draftAuth.aiAllowed && store.selectedTeam != null,
             isStreaming = false,
             onSend = { submission ->
                 val session = store.newSession() ?: return@ChatComposer false

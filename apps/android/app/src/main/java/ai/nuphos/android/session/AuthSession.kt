@@ -54,9 +54,11 @@ class AuthSession(
     var profileError: String? by mutableStateOf(null)
         private set
     val aiAllowed: Boolean get() = token?.let { AiAccess.allows(it) } == true
+    val composerDrafts = ComposerDrafts()
     private var consentRequest = 0L
 
     private fun beginIdentity(): Long {
+        composerDrafts.onIdentity(null)
         generation++
         consentRequest++
         consentVersion = null
@@ -93,6 +95,7 @@ class AuthSession(
                         consentError = "Your AI access changed. Reload your sharing choice before continuing."
                     }
                 } else {
+                    composerDrafts.clear()
                     AiAccess.revoke()
                     if (result.version != AccountApi.AI_CONSENT_VERSION) {
                         consentError = "This privacy notice has changed. Please update Nuphos before using AI."
@@ -136,7 +139,10 @@ class AuthSession(
                             consentVersion = null
                             consentError = "Your AI access changed. Reload your sharing choice before continuing."
                         }
-                    } else AiAccess.revokeIfCurrent(current, revision)
+                    } else {
+                        composerDrafts.clear()
+                        AiAccess.revokeIfCurrent(current, revision)
+                    }
                 } else {
                     AiAccess.revoke()
                     consentError = "Nuphos could not confirm your AI sharing choice. Please retry."
@@ -189,6 +195,7 @@ class AuthSession(
                 val restored = NuphosApi.currentUser(saved)
                 if (generation != expected) return@launch
                 AiAccess.activate(saved)
+                composerDrafts.onIdentity(restored.id)
                 state = State.SignedIn(restored)
                 loadAIConsent()
             } catch (_: NuphosApi.Failure.Unauthorized) {
@@ -250,6 +257,7 @@ class AuthSession(
                 tokenStore.write(token)
                 this@AuthSession.token = token
                 AiAccess.activate(token)
+                composerDrafts.onIdentity(user.id)
                 state = State.SignedIn(user)
                 loadAIConsent()
             } catch (e: Exception) {

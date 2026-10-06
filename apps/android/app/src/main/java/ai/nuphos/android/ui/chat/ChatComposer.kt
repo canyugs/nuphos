@@ -116,6 +116,8 @@ fun ChatComposer(
     isStreaming: Boolean,
     onSend: (ComposerSubmission) -> Boolean,
     canSubmit: Boolean = true,
+    draft: ai.nuphos.android.session.ComposerDrafts.Lease? = null,
+    draftingEnabled: Boolean = true,
     rejectedSubmission: ComposerSubmission? = null,
     onRejectedRestored: () -> Unit = {},
     onStop: (() -> Unit)? = null,
@@ -130,7 +132,12 @@ fun ChatComposer(
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
     var pickerError by remember { mutableStateOf<String?>(null) }
-    var text by remember { mutableStateOf("") }
+    var localText by remember(draft) { mutableStateOf("") }
+    val text = draft?.text ?: localText
+    fun updateText(value: String) {
+        if (!draftingEnabled) return
+        if (draft != null) draft.write(value) else localText = value
+    }
     val attachments = remember { mutableStateListOf<ComposerAttachment>() }
     DisposableEffect(attachments) {
         onDispose {
@@ -153,7 +160,7 @@ fun ChatComposer(
     val expanded = (focused || hasPayload) && !collapsedByUser
     LaunchedEffect(rejectedSubmission, text.isEmpty(), attachments.isEmpty()) {
         if (rejectedSubmission != null && text.isEmpty() && attachments.isEmpty()) {
-            text = rejectedSubmission.text
+            updateText(rejectedSubmission.text)
             attachments.addAll(rejectedSubmission.attachments)
             onRejectedRestored()
         }
@@ -192,9 +199,9 @@ fun ChatComposer(
     val resolvedMode = mode ?: store.permissionMode
 
     fun send() {
-        if (!hasPayload || !canSubmit || picking) return
+        if (!hasPayload || !canSubmit || !draftingEnabled || picking) return
         if (!onSend(ComposerSubmission(text.trim(), attachments.toList()))) return
-        text = ""
+        if (draft != null) draft.submitted(true, text) else localText = ""
         attachments.clear()
     }
 
@@ -282,7 +289,8 @@ fun ChatComposer(
             ) {
                 BasicTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = ::updateText,
+                    enabled = draftingEnabled,
                     modifier = Modifier
                         .weight(1f)
                         .then(if (expanded) Modifier.heightIn(max = 192.dp) else Modifier)
