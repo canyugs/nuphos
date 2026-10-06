@@ -163,7 +163,7 @@ class RuntimeSetupStore(
     }
     private fun currentAttempt(): RuntimeLogin? {
         if (!active || !canAdminister || state.busy || state.attemptMismatch || !state.loginReconciled ||
-            !loginTargetCurrent() || selection.selected?.kind != "managed") return null
+            !loginTargetCurrent()) return null
         return state.attempt?.takeIf { it.attemptId == selection.loginAttemptId && it.pending && it.valid(now()) }
     }
     fun authorizationUrlFor(attemptId: String): String? = currentAttempt()
