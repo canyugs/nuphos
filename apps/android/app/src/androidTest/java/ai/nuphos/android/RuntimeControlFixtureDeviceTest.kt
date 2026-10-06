@@ -9,9 +9,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import ai.nuphos.android.data.*
 import ai.nuphos.android.model.*
+import ai.nuphos.android.session.AiAccess
+import ai.nuphos.android.session.AuthSession
 import ai.nuphos.android.session.AgentStore
 import ai.nuphos.android.session.ChatSession
 import ai.nuphos.android.session.RuntimeObservation
+import ai.nuphos.android.ui.LocalAuthSession
 import ai.nuphos.android.ui.LocalAgentStore
 import ai.nuphos.android.ui.chat.ConversationScreen
 import ai.nuphos.android.ui.theme.NuphosTheme
@@ -33,11 +36,19 @@ class RuntimeControlFixtureDeviceTest {
     private data class Recorded(val method: String, val path: String, val body: JsonValue)
     private val requests = CopyOnWriteArrayList<Recorded>()
     private lateinit var session: ChatSession
+    private var savedAccess: Any? = null
+    private val fixtureToken = "synthetic-no-credentials"
+    @Suppress("UNCHECKED_CAST") private fun accessState() = AiAccess::class.java.getDeclaredField("state").also { it.isAccessible = true }.get(AiAccess) as MutableState<Any?>
     private val assistant = ChatMessage(id = "ui-assistant", role = ChatMessage.Role.Assistant,
         parts = listOf(ChatPart.Text(text = "Synthetic runtime history")))
     private val chats get() = requests.filter { it.path == "/agent/chat" && it.method == "POST" }
 
     @Before fun blockNetwork() {
+        compose.runOnIdle {
+            savedAccess = accessState().value
+            AiAccess.activate(fixtureToken)
+            AiAccess.grant(fixtureToken)
+        }
         val mock = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             val buffer = okio.Buffer()
@@ -68,6 +79,7 @@ class RuntimeControlFixtureDeviceTest {
     @After fun restoreNetwork() {
         compose.runOnIdle {
             compose.activity.setContent { }
+            accessState().value = savedAccess
             if (::session.isInitialized) {
                 (ChatSession::class.java.getDeclaredField("scope").also { it.isAccessible = true }.get(session) as CoroutineScope).cancel()
             }
@@ -107,11 +119,17 @@ class RuntimeControlFixtureDeviceTest {
                 state(session, "uploadError", "Fixture upload failed. Retry the retained message.")
             }
             @Suppress("UNCHECKED_CAST")
-            val sessions = AgentStore::class.java.getDeclaredField("sessions").also { it.isAccessible = true }.get(store) as MutableMap<String, ChatSession>
-            sessions["fixture"] = session
+            val sessions = AgentStore::class.java.getDeclaredField("sessions").also { it.isAccessible = true }.get(store) as MutableMap<Any, ChatSession>
+            val keyType = Class.forName("ai.nuphos.android.session.AgentStore\$SessionKey")
+            val key = keyType.getDeclaredConstructor(String::class.java, String::class.java).also { it.isAccessible = true }.newInstance("ui-team", "fixture")
+            sessions[key] = session
+            val app = compose.activity.application as NuphosApplication
+            val auth = AuthSession(app, app.tokenStore)
+            AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(auth, fixtureToken)
+            state(auth, "state", AuthSession.State.SignedIn(NuphosUser("runtime-fixture", "runtime@example.invalid", "Runtime fixture")))
             compose.activity.setContent {
                 NuphosTheme {
-                    CompositionLocalProvider(LocalAgentStore provides store) {
+                    CompositionLocalProvider(LocalAgentStore provides store, LocalAuthSession provides auth) {
                         ConversationScreen("fixture", false, {}, rememberNavController())
                     }
                 }

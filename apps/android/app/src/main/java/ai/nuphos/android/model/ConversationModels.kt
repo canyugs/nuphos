@@ -47,6 +47,11 @@ data class AgentConversation(
     val readOnly: Boolean? = null,
     val tokenUsage: TokenUsage? = null,
     val activitySource: ActivitySource? = null,
+    val activeRun: JsonValue? = null,
+    val runtimeState: JsonValue? = null,
+    val activitySeq: JsonValue? = null,
+    val readSeq: JsonValue? = null,
+    val unread: JsonValue? = null,
 ) {
     @Transient
     val id: String get() = sessionId
@@ -99,6 +104,9 @@ data class AgentConversationDetail(
     val runtimeLabel: String? = null,
     val runtimeState: JsonValue? = null,
     val transcriptUpdatedAt: String? = null,
+    val activitySeq: JsonValue? = null,
+    val readSeq: JsonValue? = null,
+    val unread: JsonValue? = null,
     val title: String? = null,
     @Serializable(with = InstantAsStringSerializerNullable::class)
     val archivedAt: Instant? = null,

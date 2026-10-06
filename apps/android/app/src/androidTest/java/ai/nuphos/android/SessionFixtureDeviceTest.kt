@@ -67,7 +67,8 @@ class SessionFixtureDeviceTest {
     }
     @After fun restore() { originals.forEach { (name, value) -> Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, value) } }
     private fun session(transfers: AttachmentTransfers = AttachmentTransfers()): ChatSession {
-        val session = ChatSession("fixture-no-credentials", "fixture-team", "fixture", transfers = transfers)
+        // This intercepted transport suite does not test account consent. Use the existing capability seam.
+        val session = ChatSession("fixture-no-credentials", "fixture-team", "fixture", transfers = transfers, aiAllowed = { true })
         runBlocking { session.load() }
         compose.waitForIdle()
         Assert.assertNull(session.loadError)

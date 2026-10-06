@@ -29,6 +29,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,12 +45,15 @@ import androidx.navigation.NavHostController
 import ai.nuphos.android.model.AgentConversation
 import ai.nuphos.android.model.HistoryTime
 import ai.nuphos.android.model.NuphosUser
+import ai.nuphos.android.session.HistoryStatus
+import ai.nuphos.android.session.RuntimeObservation
 import ai.nuphos.android.session.PinnedHistory
 import ai.nuphos.android.session.AgentStore
 import ai.nuphos.android.ui.LocalAgentStore
 import ai.nuphos.android.ui.chat.ChatComposer
 import ai.nuphos.android.ui.components.NuphosAvatar
 import ai.nuphos.android.ui.components.SearchField
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -62,6 +68,12 @@ fun AgentPage(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    var statusClock by remember(store) { mutableStateOf(RuntimeObservation.now()) }
+    LaunchedEffect(store, store.historyRevision, store.conversations, statusClock) {
+        val now = RuntimeObservation.now()
+        val expiry = store.conversations.mapNotNull { store.historyObservation(it)?.runtime?.observedAt?.plus(12.0) }.filter { it > now }.minOrNull()
+        if (expiry != null) { delay(((expiry - now) * 1000).toLong() + 1); statusClock = RuntimeObservation.now() }
+    }
     val pins = store.pinnedShortcuts
     LaunchedEffect(store, store.selectedTeam?.id) { store.loadFavorites() }
     LaunchedEffect(listState, store.hasMore, store.conversations) {
@@ -145,7 +157,7 @@ fun AgentPage(
                             item(key = "history:header") { Text("History", style = MaterialTheme.typography.titleSmall) }
                         }
                         items(store.conversations, key = { "history:${it.sessionId}" }) { conversation ->
-                            ConversationRow(conversation, store.favorites?.contains(conversation.sessionId) == true) {
+                            ConversationRow(conversation, store.favorites?.contains(conversation.sessionId) == true, store.historyObservation(conversation)?.label(maxOf(statusClock, RuntimeObservation.now()))) {
                                 nav.navigate("conversation/${conversation.sessionId}")
                             }
                         }
@@ -182,7 +194,7 @@ fun AgentPage(
 }
 
 @Composable
-private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, onClick: () -> Unit) {
+private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, status: String?, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -204,6 +216,8 @@ private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, on
             )
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(conversation.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (status != null) Text(status, style = MaterialTheme.typography.labelSmall)
+                else if (HistoryStatus.unread(conversation)) Text("Unread", style = MaterialTheme.typography.labelSmall)
                 Text(meta(conversation), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (pinned) {

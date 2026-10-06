@@ -49,6 +49,18 @@ class ChatSession(
         private set
     var messages by mutableStateOf(listOf<ChatMessage>())
         private set
+    data class ReadTranscript(val generation: Long, val seq: Long, val messages: List<ChatMessage>)
+    var readTranscript by mutableStateOf<ReadTranscript?>(null)
+        private set
+    private var readGeneration = 0L
+    private var detailLoadGeneration = 0L
+    val readAllowed get() = hasAiAccess && !browsingOnly && loaded && loadError == null
+    private fun recordReadTranscript(detail: AgentConversationDetail) {
+        val seq = HistoryStatus.sequence(detail.activitySeq)
+        if (detail.isOwner != true || browsingOnly || seq == null || ((detail.messagesFirstIndex ?: 0) != 0 && detail.activeRun != null) || messages != detail.messages) { readTranscript = null; return }
+        if (readTranscript?.seq != seq || readTranscript?.messages != messages)
+            readTranscript = ReadTranscript(++readGeneration, seq, messages)
+    }
     var baseIndex by mutableStateOf(0)
         private set
     var isStreaming by mutableStateOf(false)
@@ -162,10 +174,13 @@ class ChatSession(
 
     suspend fun load() {
         if (!hasAiAccess) return
+        readTranscript = null
+        readGeneration++
+        val detailGeneration = ++detailLoadGeneration
         try {
             val observedAt = RuntimeObservation.now()
             val detail = readDetail(token, teamId, sessionId)
-            if (!hasAiAccess) return
+            if (!hasAiAccess || detailGeneration != detailLoadGeneration) return
             refreshMetadata(detail, observedAt)
             var msgs = detail.messages
             baseIndex = detail.messagesFirstIndex ?: 0
@@ -195,6 +210,8 @@ class ChatSession(
                 messages = msgs
                 loaded = true
             }
+            loadError = null
+            recordReadTranscript(detail)
             lastSyncedSignature = signature()
             val text = sendAfterLoad
             if (text != null) {
@@ -202,7 +219,7 @@ class ChatSession(
                 if (!readOnly && !isStreaming) send(text)
             }
         } catch (e: Exception) {
-            if (!hasAiAccess) return
+            if (!hasAiAccess || detailGeneration != detailLoadGeneration) return
             loadError = e.message
             loaded = true
         }
@@ -778,9 +795,10 @@ class ChatSession(
         if (generation != transportGeneration || !hasAiAccess) return
         refreshMetadata(detail, observedAt)
         reconcileAdmission(detail)
-        if (isStreaming) return
+        if (isStreaming) { readTranscript = null; return }
         val serverTotal = (detail.messagesFirstIndex ?: 0) + detail.messages.size
         if (isNative || serverTotal >= baseIndex + messages.size) adoptMessages(detail.messages, detail.messagesFirstIndex ?: 0)
+        recordReadTranscript(detail)
         lastSyncedSignature = signature()
     }
 
@@ -800,6 +818,7 @@ class ChatSession(
             val run = detail.activeRun
             val follow = followOptions(run?.streamId)
             if (follow != null) {
+                readTranscript = null
                 if (isNative) adoptMessages(detail.messages, detail.messagesFirstIndex ?: 0)
                 else {
                     val lastUser = detail.messages.indexOfLast { it.role == ChatMessage.Role.User }
@@ -811,7 +830,12 @@ class ChatSession(
             }
             if (!isStreaming && (isNative || (detail.messagesFirstIndex ?: 0) + detail.messages.size > baseIndex + messages.size)) {
                 adoptMessages(detail.messages, detail.messagesFirstIndex ?: 0)
+                recordReadTranscript(detail)
                 lastSyncedSignature = signature()
+            } else if (!isStreaming && messages == detail.messages) {
+                recordReadTranscript(detail)
+            } else {
+                readTranscript = null
             }
         }
     }
@@ -1192,6 +1216,9 @@ class ChatSession(
 
     /** Revoke local work and unsent copies without cancelling the server run. */
     fun disposeForConsent() {
+        readTranscript = null
+        readGeneration++
+        detailLoadGeneration++
         consentDisposed = true
         transportGeneration += 1
         uploadGeneration += 1

@@ -6,6 +6,7 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import ai.nuphos.android.data.ConversationReadApi
 import ai.nuphos.android.data.ConversationActions
 import ai.nuphos.android.data.NuphosApi
 import ai.nuphos.android.model.AgentConversation
@@ -50,6 +51,25 @@ class AgentStore(
     var hasMore by mutableStateOf(false)
         private set
     private var nextCursor: String? = null
+    private val historyObservations = mutableMapOf<Pair<String, String>, HistoryStatus.Observation>()
+    var historyRevision by mutableStateOf(0)
+        private set
+    private fun observeHistory(rows: List<AgentConversation>, teamId: String, observedAt: Double) {
+        rows.forEach { row ->
+            val key = (row.teamId ?: teamId) to row.sessionId
+            val next = HistoryStatus.observe(row, observedAt)
+            if (historyObservations[key]?.accepts(next) != false) historyObservations[key] = next
+        }
+        historyRevision++
+    }
+    fun historyObservation(row: AgentConversation) = historyObservations[(row.teamId ?: selectedTeam?.id.orEmpty()) to row.sessionId]
+    suspend fun markRead(teamId: String, sessionId: String, seq: Long) = ConversationReadApi.mark(token, teamId, sessionId, seq)
+    fun applyRead(teamId: String, sessionId: String, seq: Long, state: ConversationReadApi.State) {
+        if (!hasAiAccess() || selectedTeam?.id != teamId) return
+        conversations = conversations.map { row ->
+            if ((row.teamId ?: teamId) == teamId && row.sessionId == sessionId) HistoryStatus.mergeRead(row, seq, state.activitySeq, state.readSeq) else row
+        }
+    }
 
     var scope: ConversationScope by mutableStateOf(ConversationScope.Mine)
         private set
@@ -214,6 +234,8 @@ class AgentStore(
     fun select(team: Team) {
         if (team == selectedTeam) return
         selectedTeam = team
+        historyObservations.clear()
+        historyRevision++
         clearFavorites()
         prefs.edit().putString(LAST_TEAM_KEY, team.id).apply()
         credentialCatalog = null
@@ -232,6 +254,7 @@ class AgentStore(
         val generation = loadGeneration
         if (conversations.isEmpty()) phase = Phase.Loading
         try {
+            val observedAt = RuntimeObservation.now()
             val page = NuphosApi.conversations(
                 token = token,
                 teamId = team.id,
@@ -241,6 +264,7 @@ class AgentStore(
                 archivedOnly = archivedOnly,
             )
             if (generation != loadGeneration) return
+            observeHistory(page.conversations, team.id, observedAt)
             conversations = page.conversations
             nextCursor = page.nextCursor
             hasMore = page.hasMore
@@ -260,6 +284,7 @@ class AgentStore(
         isLoadingMore = true
         val generation = loadGeneration
         try {
+            val observedAt = RuntimeObservation.now()
             val page = NuphosApi.conversations(
                 token = token,
                 teamId = team.id,
@@ -270,6 +295,7 @@ class AgentStore(
                 archivedOnly = archivedOnly,
             )
             if (generation != loadGeneration) return
+            observeHistory(page.conversations, team.id, observedAt)
             val seen = conversations.map { it.sessionId }.toSet()
             conversations = conversations + page.conversations.filter { it.sessionId !in seen }
             nextCursor = page.nextCursor
@@ -313,6 +339,8 @@ class AgentStore(
     }
 
     fun disposeForConsent() {
+        historyObservations.clear()
+        historyRevision++
         clearFavorites()
         storeScope.coroutineContext[Job]?.cancel()
         sessions.values.forEach { it.disposeForConsent() }

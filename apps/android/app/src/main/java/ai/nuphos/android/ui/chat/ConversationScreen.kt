@@ -54,6 +54,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import ai.nuphos.android.session.ConversationReads
+import ai.nuphos.android.session.AiAccess
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +108,47 @@ fun ConversationScreen(
     }
     DisposableEffect(session) {
         onDispose { session.disposeBrowsing() }
+    }
+    val auth = LocalAuthSession.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var resumed by remember(lifecycle) { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    val reads = remember(session) { ConversationReads() }
+    val readTarget = ConversationReads.Target("${auth.generation}:${AiAccess.revision}", session.teamId, session.sessionId)
+    val visible = resumed && !browsingOnly && auth.aiAllowed && store.selectedTeam?.id == session.teamId
+    DisposableEffect(lifecycle, reads) {
+        val observer = LifecycleEventObserver { _, _ ->
+            resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if (!resumed) reads.hidden()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); reads.hidden() }
+    }
+    DisposableEffect(reads, visible, readTarget) {
+        if (visible) reads.visible(readTarget) else reads.hidden()
+        onDispose { reads.hidden() }
+    }
+    val transcript = session.readTranscript
+    LaunchedEffect(session, transcript, session.messages, visible, readTarget) {
+        if (!visible || transcript == null || !session.readAllowed || transcript.messages != session.messages) return@LaunchedEffect
+        withFrameNanos { }
+        repeat(2) { attempt ->
+            if (!visible || !session.readAllowed || session.readTranscript != transcript || transcript.messages != session.messages) return@LaunchedEffect
+            val ticket = reads.begin(readTarget, transcript.generation, transcript.seq) ?: return@LaunchedEffect
+            try {
+                val state = store.markRead(session.teamId, session.sessionId, ticket.seq)
+                if (reads.accepts(ticket, readTarget, session.readTranscript?.generation ?: -1, session.readAllowed && transcript.messages == session.messages)) {
+                    store.applyRead(session.teamId, session.sessionId, ticket.seq, state)
+                    reads.completed(ticket)
+                }
+                return@LaunchedEffect
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                reads.failed(ticket)
+                throw e
+            } catch (_: Exception) {
+                reads.failed(ticket)
+                if (attempt == 0) delay(1_000)
+            }
+        }
     }
     var alwaysTarget by remember { mutableStateOf<ChatPart.Tool?>(null) }
     var alwaysRule by remember { mutableStateOf("") }
