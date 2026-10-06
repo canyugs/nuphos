@@ -270,6 +270,7 @@ class AgentStore(
             return
         }
         loadGeneration += 1
+        isLoadingMore = false
         val generation = loadGeneration
         val hasLoadedHistory = phase == Phase.Loaded || conversations.isNotEmpty()
         if (conversations.isEmpty()) phase = Phase.Loading

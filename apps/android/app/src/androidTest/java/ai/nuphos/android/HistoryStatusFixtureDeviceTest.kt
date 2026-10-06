@@ -49,6 +49,8 @@ class HistoryStatusFixtureDeviceTest {
     @Volatile private var holdNextList = false
     private val listHeld = CountDownLatch(1)
     private val listRelease = CountDownLatch(1)
+    private val followingHeld = CountDownLatch(1)
+    private val followingRelease = CountDownLatch(1)
     @Volatile private var listActivity = 4L
     @Volatile private var listRead = 1L
     @Volatile private var readActivity = 4L
@@ -91,6 +93,7 @@ class HistoryStatusFixtureDeviceTest {
                             runtimeState = if (backgroundPhase) JsonValue.parse("""{"schemaVersion":2,"state":"active","phase":"background_tools","epoch":"a","revision":2}""") else row().runtimeState)
                         val fail = failList
                         if (holdNextList) { holdNextList = false; listHeld.countDown(); check(listRelease.await(10, TimeUnit.SECONDS)) }
+                        if (req.url.queryParameter("cursor") == "following-page") { followingHeld.countDown(); check(followingRelease.await(10, TimeUnit.SECONDS)) }
                         if (fail) { code = 503; "{}" } else Http.json.encodeToString(AgentConversationsPage.serializer(), AgentConversationsPage(listOf(snapshot)))
                     }
                     "/agent/conversations/saved" -> {
@@ -123,6 +126,7 @@ class HistoryStatusFixtureDeviceTest {
             release.countDown()
             detailRelease.countDown()
             listRelease.countDown()
+            followingRelease.countDown()
             work.cancel()
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 if (::store.isInitialized) store.disposeForConsent()
@@ -256,6 +260,37 @@ class HistoryStatusFixtureDeviceTest {
         assertEquals(1, store.conversations.size)
         assertEquals(4L, HistoryStatus.sequence(store.conversations.single().readSeq))
         assertFalse(HistoryStatus.unread(store.conversations.single()))
+        assertKnownRequests()
+    }
+    @Test fun refreshSupersedesHeldPaginationWithoutBlockingNextPage() {
+        render()
+        lateinit var oldPage: Job
+        compose.runOnIdle {
+            holdNextList = true
+            AgentStore::class.java.getDeclaredField("nextCursor").also { it.isAccessible = true }.set(store, "held-page")
+            state(store, "hasMore").value = true
+            oldPage = work.launch { store.loadMore() }
+        }
+        compose.waitUntil(5_000) { listHeld.count == 0L }
+        assertTrue(store.isLoadingMore)
+        val refreshed = refresh()
+        compose.waitUntil(5_000) { refreshed.isCompleted }
+        assertFalse("Refresh must release the superseded pagination flag", store.isLoadingMore)
+        val before = requests.count { it.url.encodedPath == "/agent/conversations" }
+        compose.runOnIdle {
+            AgentStore::class.java.getDeclaredField("nextCursor").also { it.isAccessible = true }.set(store, "following-page")
+            state(store, "hasMore").value = true
+            work.launch { store.loadMore() }
+        }
+        compose.waitUntil(5_000) { followingHeld.count == 0L }
+        assertTrue(store.isLoadingMore)
+        listRelease.countDown()
+        compose.waitUntil(5_000) { oldPage.isCompleted }
+        assertTrue("Obsolete completion must not clear the newer page flag", store.isLoadingMore)
+        followingRelease.countDown()
+        compose.waitUntil(5_000) {
+            requests.count { it.url.encodedPath == "/agent/conversations" } > before && !store.isLoadingMore
+        }
         assertKnownRequests()
     }
     @Test fun teamRoundTripRejectsLateListAndResetsReadProgress() {
