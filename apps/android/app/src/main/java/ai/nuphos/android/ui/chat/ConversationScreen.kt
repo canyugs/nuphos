@@ -387,7 +387,6 @@ private fun ChatRowView(
             row,
             MemoryRecallAccess(
                 loaded = session.canShowRecall(row),
-                loadFailed = session.loadError != null,
                 allowed = LocalAuthSession.current.aiAllowed,
                 originTeamId = session.teamId,
                 selectedTeamId = LocalAgentStore.current.selectedTeam?.id,

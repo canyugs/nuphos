@@ -20,12 +20,11 @@ import ai.nuphos.android.model.ChatRow
 
 internal data class MemoryRecallAccess(
     val loaded: Boolean,
-    val loadFailed: Boolean,
     val allowed: Boolean,
     val originTeamId: String,
     val selectedTeamId: String?,
 ) {
-    val canExpand get() = loaded && !loadFailed && allowed && originTeamId.isNotBlank() && originTeamId == selectedTeamId
+    val canExpand get() = loaded && allowed && originTeamId.isNotBlank() && originTeamId == selectedTeamId
 }
 
 internal fun ChatRow.MemoryRecall.visibleTeamLabels(access: MemoryRecallAccess): List<String> {

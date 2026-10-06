@@ -78,10 +78,9 @@ class ChatRowTest {
     @Test fun recallExpansionRequiresSuccessfulCurrentTeamAccess() {
         val row = ChatRow.MemoryRecall("row", listOf(ChatRow.MemoryEntry("t", "Team guide", "team"),
             ChatRow.MemoryEntry("p", "Private secret", "personal"), ChatRow.MemoryEntry("u", "Unknown secret", "unknown")), 3)
-        val access = MemoryRecallAccess(true, false, true, "A", "A")
+        val access = MemoryRecallAccess(true, true, "A", "A")
         assertEquals(listOf("Team guide"), row.visibleTeamLabels(access))
         assertTrue(row.visibleTeamLabels(access.copy(loaded = false)).isEmpty())
-        assertTrue(row.visibleTeamLabels(access.copy(loadFailed = true)).isEmpty())
         assertTrue(row.visibleTeamLabels(access.copy(allowed = false)).isEmpty())
         assertTrue(row.visibleTeamLabels(access.copy(selectedTeamId = "B")).isEmpty())
         val duplicate = row.copy(entries = row.entries + ChatRow.MemoryEntry("t", "Hidden duplicate", "unknown"))
