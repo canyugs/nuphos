@@ -6,6 +6,8 @@ import ai.nuphos.android.data.Http
 import ai.nuphos.android.data.JsonValue
 import ai.nuphos.android.model.*
 import ai.nuphos.android.session.ChatSession
+import ai.nuphos.android.session.AiAccess
+import androidx.compose.runtime.MutableState
 import kotlinx.coroutines.runBlocking
 import okhttp3.*
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -19,7 +21,10 @@ class BrowsingSessionFixtureDeviceTest {
     private val originals = mutableMapOf<String, OkHttpClient>()
     private val requests = CopyOnWriteArrayList<Request>()
     private var native = false
+    private var savedAccess: Any? = null
+    @Suppress("UNCHECKED_CAST") private fun accessState() = AiAccess::class.java.getDeclaredField("state").also { it.isAccessible = true }.get(AiAccess) as MutableState<Any?>
     @Before fun blockNetwork() {
+        compose.runOnIdle { savedAccess = accessState().value }
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             requests += request
@@ -48,6 +53,7 @@ class BrowsingSessionFixtureDeviceTest {
         }
     }
     @After fun restore() {
+        compose.runOnIdle { accessState().value = savedAccess }
         originals.forEach { (name, client) ->
             Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client)
         }
@@ -56,6 +62,7 @@ class BrowsingSessionFixtureDeviceTest {
     @Test fun activeNativeRunRemainsGetOnly() = exercise(true)
     private fun exercise(isNative: Boolean) {
         native = isNative
+        compose.runOnIdle { AiAccess.activate("fixture-no-credentials"); AiAccess.grant("fixture-no-credentials") }
         val session = ChatSession("fixture-no-credentials", "fixture-team", "fixture", browsingOnly = true)
         try {
             session.sendAfterLoad = "Never send this prompt"

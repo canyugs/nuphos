@@ -21,6 +21,7 @@ import ai.nuphos.android.data.Http
 import ai.nuphos.android.data.JsonValue
 import ai.nuphos.android.model.*
 import ai.nuphos.android.session.AgentStore
+import ai.nuphos.android.session.AiAccess
 import ai.nuphos.android.session.AuthSession
 import ai.nuphos.android.ui.LocalAgentStore
 import ai.nuphos.android.ui.LocalAuthSession
@@ -48,7 +49,9 @@ class BrowsingScreenFixtureDeviceTest {
     private lateinit var nav: NavHostController
     private var backs = 0
     private val openedUris = mutableListOf<String>()
+    @Suppress("UNCHECKED_CAST") private fun accessState() = AiAccess::class.java.getDeclaredField("state").also { it.isAccessible = true }.get(AiAccess) as MutableState<Any?>
     private val network = object : ExternalResource() {
+        private var savedAccess: Any? = null
         private lateinit var installedAuth: AuthSession
         private lateinit var savedState: AuthSession.State
         private var savedToken: String? = null
@@ -57,6 +60,7 @@ class BrowsingScreenFixtureDeviceTest {
             installedAuth = app.authSession
             savedState = installedAuth.state
             savedToken = installedAuth.token
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { savedAccess = accessState().value }
             val client = OkHttpClient.Builder().addInterceptor { chain ->
                 val request = chain.request()
                 requests += request
@@ -74,6 +78,7 @@ class BrowsingScreenFixtureDeviceTest {
         override fun after() {
             // Activity teardown disposes the browsing session before transport restoration.
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                accessState().value = savedAccess
                 state(installedAuth, "state", savedState)
                 AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(installedAuth, savedToken)
             }
@@ -110,6 +115,8 @@ class BrowsingScreenFixtureDeviceTest {
 
     private fun render(selectedTeam: String = team) {
         compose.runOnIdle {
+            AiAccess.activate("synthetic-no-credentials")
+            AiAccess.grant("synthetic-no-credentials")
             store = AgentStore("synthetic-no-credentials", compose.activity)
             state(store, "selectedTeam", Team(selectedTeam, "Fixture team"))
             val app = compose.activity.application as NuphosApplication

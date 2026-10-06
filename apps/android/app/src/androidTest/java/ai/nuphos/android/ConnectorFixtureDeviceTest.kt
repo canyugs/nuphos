@@ -173,11 +173,11 @@ class ConnectorFixtureDeviceTest {
         compose.onNodeWithTag("connector-catalog").performClick()
         compose.onNodeWithTag("connector-catalog-list").performScrollToNode(hasTestTag("connector-add-azure"))
         compose.onNodeWithTag("connector-add-azure").performClick()
+        // Expand the partially opened sheet before checking a field on a compact screen.
+        compose.onNodeWithTag("connector-form-list").performTouchInput { swipeUp() }
         compose.onNodeWithTag("connector-form-list").performScrollToNode(hasTestTag("connector-field-subscriptionId"))
         compose.onNodeWithTag("connector-field-subscriptionId").assertIsDisplayed()
         capture("22-azure-form-large-text-fixture")
-        // Expand the partially opened sheet through the same swipe a user makes.
-        compose.onNodeWithTag("connector-form-list").performTouchInput { swipeUp() }
         compose.onNodeWithTag("connector-form-list").performScrollToNode(hasTestTag("connector-save"))
         capture("23-azure-form-actions-large-text-fixture")
         compose.onNodeWithText("Cancel").assertIsDisplayed().performClick()

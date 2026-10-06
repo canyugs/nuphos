@@ -134,6 +134,7 @@ class PinnedHistoryFixtureDeviceTest {
             AiAccess.grant(token)
             store = AgentStore(token, compose.activity)
             state(store, "selectedTeam").value = Team("A", "Fixture A")
+            store.acceptMemberships(listOf(Team("A", "Fixture A"), Team("B", "Fixture B")))
             state(store, "phase").value = AgentStore.Phase.Loaded
             state(store, "conversations").value = if (emptyHistory) emptyList<AgentConversation>() else listOf(AgentConversation("normal", "A", "Normal history"))
             val auth = AuthSession(app, app.tokenStore)

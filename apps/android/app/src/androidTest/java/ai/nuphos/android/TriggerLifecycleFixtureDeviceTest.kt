@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit
 @RunWith(AndroidJUnit4::class)
 class TriggerLifecycleFixtureDeviceTest {
     private val compose = createAndroidComposeRule<MainActivity>()
-    private val team = "lifecycle-fixture-team"
+    private val team = "cccccccccccccccccccccccc"
     private val trigger = "0123456789abcdef01234567"
     private val run = "lifecycle-fixture-run"
     private val answer = "Saved lifecycle fixture answer"
@@ -73,13 +73,13 @@ class TriggerLifecycleFixtureDeviceTest {
                         }
                         if (recreating && outcome == "denied") { code = 403; "{}" }
                         else {
-                            val selected = if (recreating && outcome == "mismatch") "other-fixture-team" else team
+                            val selected = if (recreating && outcome == "mismatch") "dddddddddddddddddddddddd" else team
                             """{"teams":[{"id":"$selected","name":"Fixture team"}]}"""
                         }
                     }
                     path == "/teams/$team/agent-triggers" -> """[{"id":"$trigger","name":"Lifecycle fixture trigger","triggerType":"cron","enabled":true}]"""
-                    path == "/teams/other-fixture-team/agent-triggers" -> "[]"
-                    path == "/teams/other-fixture-team/agent-triggers/scheduler-status" -> """{"cronEnabled":true}"""
+                    path == "/teams/dddddddddddddddddddddddd/agent-triggers" -> "[]"
+                    path == "/teams/dddddddddddddddddddddddd/agent-triggers/scheduler-status" -> """{"cronEnabled":true}"""
                     path == "/teams/$team/agent-triggers/scheduler-status" -> """{"cronEnabled":true}"""
                     path == "/agent/conversations" -> if (request.url.queryParameter("triggerId") == trigger)
                         """{"conversations":[{"sessionId":"$run","teamId":"$team","title":"Lifecycle fixture run","messageCount":1}]}""" else """{"conversations":[]}"""
