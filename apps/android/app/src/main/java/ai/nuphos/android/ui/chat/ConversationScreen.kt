@@ -383,7 +383,16 @@ private fun ChatRowView(
                 Text("Memory updated", modifier = Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelMedium)
             }
         }
-        is ChatRow.MemoryRecall -> Text("Memory recalled · ${maxOf(row.entries.size, row.fetched)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+        is ChatRow.MemoryRecall -> MemoryRecallRow(
+            row,
+            MemoryRecallAccess(
+                loaded = session.canShowRecall(row),
+                loadFailed = session.loadError != null,
+                allowed = LocalAuthSession.current.aiAllowed,
+                originTeamId = session.teamId,
+                selectedTeamId = LocalAgentStore.current.selectedTeam?.id,
+            ),
+        )
         is ChatRow.Activity -> Row(verticalAlignment = Alignment.CenterVertically) {
             if (!row.text.isNullOrEmpty()) Text(row.text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.size(8.dp))

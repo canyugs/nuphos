@@ -12,6 +12,7 @@ import ai.nuphos.android.data.RuntimeApi
 import ai.nuphos.android.data.Http
 import ai.nuphos.android.model.AgentConversationDetail
 import ai.nuphos.android.data.SseClient
+import ai.nuphos.android.model.ChatRow
 import ai.nuphos.android.model.ChatMessage
 import ai.nuphos.android.model.ChatPart
 import ai.nuphos.android.model.ComposerSubmission
@@ -52,10 +53,14 @@ class ChatSession(
     data class ReadTranscript(val generation: Long, val seq: Long, val messages: List<ChatMessage>)
     var readTranscript by mutableStateOf<ReadTranscript?>(null)
         private set
+    private var recallRows by mutableStateOf(setOf<ChatRow.MemoryRecall>())
+    fun canShowRecall(row: ChatRow.MemoryRecall) = hasAiAccess && loaded && loadError == null && row in recallRows
     private var readGeneration = 0L
     private var detailLoadGeneration = 0L
     val readAllowed get() = hasAiAccess && !browsingOnly && loaded && loadError == null
     private fun recordReadTranscript(detail: AgentConversationDetail) {
+        recallRows = if (messages == detail.messages) ChatRow.rows(detail.messages)
+            .filterIsInstance<ChatRow.MemoryRecall>().toSet() else emptySet()
         val seq = HistoryStatus.sequence(detail.activitySeq)
         if (detail.isOwner != true || browsingOnly || seq == null || ((detail.messagesFirstIndex ?: 0) != 0 && detail.activeRun != null) || messages != detail.messages) { readTranscript = null; return }
         if (readTranscript?.seq != seq || readTranscript?.messages != messages)
@@ -174,6 +179,7 @@ class ChatSession(
 
     suspend fun load() {
         if (!hasAiAccess) return
+        recallRows = emptySet()
         readTranscript = null
         readGeneration++
         val detailGeneration = ++detailLoadGeneration
@@ -791,11 +797,12 @@ class ChatSession(
         if (!hasAiAccess || (isStreaming && !isNative)) return
         val generation = transportGeneration
         val observedAt = RuntimeObservation.now()
-        val detail = runCatching { readDetail(token, teamId, sessionId) }.getOrNull() ?: return
+        val detail = runCatching { readDetail(token, teamId, sessionId) }.getOrNull()
         if (generation != transportGeneration || !hasAiAccess) return
+        if (detail == null) { recallRows = emptySet(); return }
         refreshMetadata(detail, observedAt)
         reconcileAdmission(detail)
-        if (isStreaming) { readTranscript = null; return }
+        if (isStreaming) { recallRows = emptySet(); readTranscript = null; return }
         val serverTotal = (detail.messagesFirstIndex ?: 0) + detail.messages.size
         if (isNative || serverTotal >= baseIndex + messages.size) adoptMessages(detail.messages, detail.messagesFirstIndex ?: 0)
         recordReadTranscript(detail)
@@ -811,13 +818,15 @@ class ChatSession(
             if (!loaded || loadError != null || (!isNative && isStreaming)) continue
             val generation = transportGeneration
             val observedAt = RuntimeObservation.now()
-            val detail = runCatching { readDetail(token, teamId, sessionId) }.getOrNull() ?: continue
+            val detail = runCatching { readDetail(token, teamId, sessionId) }.getOrNull()
             if (generation != transportGeneration || !hasAiAccess) continue
+            if (detail == null) { recallRows = emptySet(); continue }
             refreshMetadata(detail, observedAt)
             reconcileAdmission(detail)
             val run = detail.activeRun
             val follow = followOptions(run?.streamId)
             if (follow != null) {
+                recallRows = emptySet()
                 readTranscript = null
                 if (isNative) adoptMessages(detail.messages, detail.messagesFirstIndex ?: 0)
                 else {
@@ -835,6 +844,7 @@ class ChatSession(
             } else if (!isStreaming && messages == detail.messages) {
                 recordReadTranscript(detail)
             } else {
+                recallRows = emptySet()
                 readTranscript = null
             }
         }
@@ -1216,6 +1226,7 @@ class ChatSession(
 
     /** Revoke local work and unsent copies without cancelling the server run. */
     fun disposeForConsent() {
+        recallRows = emptySet()
         readTranscript = null
         readGeneration++
         detailLoadGeneration++
@@ -1252,7 +1263,12 @@ class ChatSession(
 
     /** Release this view's local jobs without cancelling the server run. */
     fun disposeBrowsing() {
-        if (browsingOnly) scope.cancel()
+        if (browsingOnly) {
+            recallRows = emptySet()
+            detailLoadGeneration++
+            transportGeneration++
+            scope.cancel()
+        }
     }
 
     private fun newId() = UUID.randomUUID().toString().lowercase()

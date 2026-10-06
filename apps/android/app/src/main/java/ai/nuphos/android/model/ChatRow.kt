@@ -97,11 +97,11 @@ sealed class ChatRow {
                         val labels = v["labels"]?.objectValue.orEmpty()
                         fun entries(key: String, scope: String) =
                             (v[key]?.arrayValue ?: emptyList()).mapNotNull { it.stringValue }.map {
-                                MemoryEntry(it, labels[it]?.stringValue ?: it, scope)
+                                MemoryEntry(it, if (scope == "team") labels[it]?.stringValue?.takeIf { label -> label.isNotBlank() } ?: "Memory label unavailable" else "Details unavailable", scope)
                             }
                         val seen = mutableSetOf<String>()
-                        val all = (entries("recalledPersonalIds", "personal") + entries("recalledTeamIds", "team") +
-                            entries("fetchedPersonalIds", "personal") + entries("fetchedTeamIds", "team"))
+                        val all = (entries("recalledPersonalIds", "personal") + entries("fetchedPersonalIds", "personal") +
+                            entries("recalledTeamIds", "team") + entries("fetchedTeamIds", "team"))
                             .filter { seen.add(it.id) }
                         val fetched = v["fetchedIds"]?.arrayValue?.size ?: 0
                         if (all.isNotEmpty() || fetched > 0) {
