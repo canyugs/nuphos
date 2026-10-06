@@ -37,6 +37,10 @@ class AgentStore(
         private set
     var teamsPhase: Phase by mutableStateOf(Phase.Idle)
         private set
+    var workspaceRevision by mutableStateOf(0L)
+        private set
+    private var disposed = false
+    private var membershipRequest = 0L
     var selectedTeam: Team? by mutableStateOf(null)
         private set
 
@@ -223,15 +227,19 @@ class AgentStore(
         }
     }
 
-    suspend fun loadTeams() {
+    suspend fun loadTeams(onExpired: () -> Unit = {}) {
+        if (disposed || !hasAiAccess()) return
+        val request = ++membershipRequest
         teamsPhase = Phase.Loading
         try {
-            val loaded = NuphosApi.teams(token)
+            val loaded = ai.nuphos.android.data.WorkspaceApi(token).memberships()
+            if (disposed || !hasAiAccess() || request != membershipRequest) return
             teams = loaded
             teamsPhase = Phase.Loaded
             val remembered = prefs.getString(LAST_TEAM_KEY, null)
             val pick = loaded.firstOrNull { it.id == remembered } ?: loaded.firstOrNull()
             if (pick != selectedTeam) {
+                workspaceRevision++
                 selectedTeam = pick
                 resetHistory()
                 clearFavorites()
@@ -243,6 +251,8 @@ class AgentStore(
                 reload()
             }
         } catch (e: Exception) {
+            if (disposed || !hasAiAccess() || request != membershipRequest) return
+            if (e is NuphosApi.Failure.Unauthorized) onExpired()
             teamsPhase = Phase.Failed
             phaseError = e.message
             if (teams.isEmpty()) {
@@ -251,9 +261,34 @@ class AgentStore(
         }
     }
 
+    fun acceptMemberships(saved: List<Team>, selectId: String? = null): Boolean {
+        if (disposed || !hasAiAccess()) return false
+        val verified = selectId?.let { id -> saved.firstOrNull { it.id == id } ?: return false }
+        membershipRequest++
+        teams = saved
+        teamsPhase = Phase.Loaded
+        selectedTeam?.let { old ->
+            val refreshed = saved.firstOrNull { it.id == old.id }
+            if (refreshed == null) {
+                workspaceRevision++
+                selectedTeam = null
+                resetHistory()
+                clearFavorites()
+                credentialCatalog = null
+                restoreCredentialSelection()
+            } else selectedTeam = refreshed
+        }
+        if (verified != null) select(verified)
+        return true
+    }
+
     fun select(team: Team) {
-        if (team == selectedTeam) return
-        selectedTeam = team
+        if (disposed || !hasAiAccess()) return
+        val verified = teams.firstOrNull { it.id == team.id } ?: return
+        if (verified == selectedTeam) return
+        workspaceRevision++
+        membershipRequest++
+        selectedTeam = verified
         resetHistory()
         clearFavorites()
         prefs.edit().putString(LAST_TEAM_KEY, team.id).apply()
@@ -363,6 +398,9 @@ class AgentStore(
     }
 
     fun disposeForConsent() {
+        disposed = true
+        membershipRequest++
+        workspaceRevision++
         resetHistory()
         clearFavorites()
         storeScope.coroutineContext[Job]?.cancel()

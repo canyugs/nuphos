@@ -55,10 +55,13 @@ class AuthSession(
         private set
     val aiAllowed: Boolean get() = token?.let { AiAccess.allows(it) } == true
     val composerDrafts = ComposerDrafts()
+    var workspaceWriteReview = WorkspaceWriteReview()
+        private set
     private var consentRequest = 0L
 
     private fun beginIdentity(): Long {
         composerDrafts.onIdentity(null)
+        workspaceWriteReview = WorkspaceWriteReview()
         generation++
         consentRequest++
         consentVersion = null

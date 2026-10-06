@@ -39,12 +39,16 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
@@ -68,6 +72,10 @@ import ai.nuphos.android.model.ConversationScope
 import ai.nuphos.android.model.HomePage
 import ai.nuphos.android.model.NuphosUser
 import ai.nuphos.android.data.BrowsingApi
+import ai.nuphos.android.data.WorkspaceApi
+import ai.nuphos.android.session.WorkspaceSetupStore
+import ai.nuphos.android.session.AiAccess
+import ai.nuphos.android.ui.workspace.WorkspaceSetupSheet
 import ai.nuphos.android.data.NuphosApi
 import ai.nuphos.android.session.MonitoringStore
 import ai.nuphos.android.session.TriggersStore
@@ -99,7 +107,16 @@ fun HomeRoute(
     plansStore: PlansStore,
     connectorsStore: ConnectorsStore,
 ) {
-    LaunchedEffect(agentStore) { agentStore.loadTeams() }
+    val membershipAuth = LocalAuthSession.current
+    LaunchedEffect(agentStore) {
+        val generation = membershipAuth.generation
+        val token = membershipAuth.token
+        val access = AiAccess.bind(token.orEmpty())
+        agentStore.loadTeams {
+            if (membershipAuth.generation == generation && membershipAuth.token == token && access())
+                membershipAuth.signOut(NuphosApi.Failure.Unauthorized.message)
+        }
+    }
     val token = LocalAuthSession.current.token.orEmpty()
     val transport = remember(token) { BrowsingApi(token) }
     val monitoring = remember(token) { MonitoringStore(transport) }
@@ -192,6 +209,36 @@ fun HomeScreen(
     val current = HomePage.fromRoute(page)
     var searching by rememberSaveable { mutableStateOf(false) }
     var showProfile by remember { mutableStateOf(false) }
+    var showWorkspaces by remember { mutableStateOf(false) }
+    var showSetup by remember { mutableStateOf(false) }
+    val auth = LocalAuthSession.current
+    val setupScope = rememberCoroutineScope()
+    var setupEpoch by remember { mutableStateOf(0L) }
+    val setup = remember(store, auth.generation, auth.token, AiAccess.revision, setupEpoch) {
+        val accountGeneration = auth.generation
+        val token = auth.token.orEmpty()
+        val access = AiAccess.bind(token)
+        var workspaceRevision = store.workspaceRevision
+        val current = { auth.generation == accountGeneration && auth.token == token && auth.user?.id == user.id &&
+            access() && store.workspaceRevision == workspaceRevision }
+        WorkspaceSetupStore(WorkspaceApi(token), setupScope, current,
+            { saved, selected ->
+                if (!current()) false else {
+                    val accepted = store.acceptMemberships(saved, selected?.id)
+                    if (accepted) workspaceRevision = store.workspaceRevision
+                    accepted
+                }
+            }, { if (current()) auth.signOut(NuphosApi.Failure.Unauthorized.message) }, auth.workspaceWriteReview)
+    }
+    DisposableEffect(setup) { onDispose { setup.close() } }
+    LaunchedEffect(store.workspaceRevision, auth.generation, auth.token, AiAccess.revision) {
+        if (!setup.isSourceCurrent()) {
+            setup.close()
+            showSetup = false
+            if (auth.aiAllowed && auth.user?.id == user.id) setupEpoch++
+        }
+    }
+
 
     LaunchedEffect(store.selectedTeam?.id) {
         plans.use(store.selectedTeam?.id)
@@ -202,7 +249,17 @@ fun HomeScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = {},
+                title = {
+                    TextButton(onClick = { showWorkspaces = true }) { Text(store.selectedTeam?.name ?: "Choose workspace") }
+                    DropdownMenu(showWorkspaces, onDismissRequest = { showWorkspaces = false }) {
+                        store.teams.forEach { team ->
+                            DropdownMenuItem(text = { Text(team.name) }, onClick = {
+                                setup.close(); showSetup = false; store.select(team); showWorkspaces = false
+                            })
+                        }
+                        DropdownMenuItem(text = { Text("Set up a workspace") }, onClick = { showWorkspaces = false; showSetup = true })
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
                     if (current == HomePage.Agent || current == HomePage.Plans) {
@@ -245,7 +302,13 @@ fun HomeScreen(
                 },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            AnimatedContent(current, modifier = Modifier.weight(1f), label = "page") { dest ->
+            if (store.selectedTeam == null && store.teamsPhase == AgentStore.Phase.Loaded) {
+                Column(Modifier.fillMaxWidth().weight(1f).padding(20.dp), verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Choose or set up a workspace to get started.")
+                    Button(onClick = { showSetup = true }, modifier = Modifier.padding(top = 12.dp)) { Text("Set up a workspace") }
+                }
+            } else AnimatedContent(current, modifier = Modifier.weight(1f), label = "page") { dest ->
                 when (dest) {
                     HomePage.Agent -> AgentPage(searching = searching, onSearchingChange = { searching = it }, nav = nav)
                     HomePage.Plans -> PlansPage(searching = searching, onSearchingChange = { searching = it }, nav = nav)
@@ -258,6 +321,7 @@ fun HomeScreen(
             }
         }
     }
+    if (showSetup) WorkspaceSetupSheet(setup) { showSetup = false }
     if (showProfile) {
         ProfileSheet(user = user, onDismiss = { showProfile = false })
     }
