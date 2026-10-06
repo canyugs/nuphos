@@ -94,11 +94,11 @@ fun ConversationScreen(
     val validBrowse = !browsingOnly || (browsingTeamId != null && selectedTeamId == browsingTeamId && token != null)
     LaunchedEffect(validBrowse) { if (!validBrowse) onBack() }
     if (!validBrowse) return
-    val conversation = store.conversations.firstOrNull { it.sessionId == sessionId }
-    val session = remember(sessionId, browsingTeamId, browsingOnly, token) {
+    val conversation = store.conversations.firstOrNull { it.sessionId == sessionId && (it.teamId == null || it.teamId == selectedTeamId) }
+    val session = remember(store, sessionId, selectedTeamId, browsingTeamId, browsingOnly, token) {
         if (browsingOnly) ChatSession(token!!, browsingTeamId!!, sessionId, browsingOnly = true)
         else if (fresh) store.session(sessionId, "New chat")
-        else conversation?.let { store.session(it) } ?: store.session(sessionId, "Chat")
+        else conversation?.let { store.session(it) } ?: store.session(sessionId, store.pinnedShortcuts.firstOrNull { it.sessionId == sessionId }?.title ?: "Chat")
     }
     DisposableEffect(session) {
         onDispose { session.disposeBrowsing() }
@@ -160,6 +160,10 @@ fun ConversationScreen(
                 .padding(padding)
                 .consumeWindowInsets(padding),
         ) {
+            if (session.loaded && session.loadError == null && session.isArchived) {
+                Text("Archived chat", Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             when {
                 !session.loaded -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingIndicator() }
                 session.loadError != null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.WifiOff
@@ -41,6 +42,7 @@ import androidx.navigation.NavHostController
 import ai.nuphos.android.model.AgentConversation
 import ai.nuphos.android.model.HistoryTime
 import ai.nuphos.android.model.NuphosUser
+import ai.nuphos.android.session.PinnedHistory
 import ai.nuphos.android.session.AgentStore
 import ai.nuphos.android.ui.LocalAgentStore
 import ai.nuphos.android.ui.chat.ChatComposer
@@ -60,10 +62,12 @@ fun AgentPage(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    LaunchedEffect(listState, store.hasMore) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .collect { last ->
-                if (store.hasMore && last != null && last >= store.conversations.lastIndex - 2) {
+    val pins = store.pinnedShortcuts
+    LaunchedEffect(store, store.selectedTeam?.id) { store.loadFavorites() }
+    LaunchedEffect(listState, store.hasMore, store.conversations) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }
+            .collect { keys ->
+                if (store.hasMore && PinnedHistory.shouldLoadMore(keys, store.conversations.map { it.sessionId })) {
                     store.loadMore()
                 }
             }
@@ -85,6 +89,15 @@ fun AgentPage(
                 },
             )
         }
+        if (store.search.isEmpty() && !store.archivedOnly) {
+            if (store.favoritesLoading) Text("Loading pinned chats…", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
+            store.favoritesError?.let {
+                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Could not refresh pinned chats.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = { scope.launch { store.loadFavorites() } }) { Text("Retry pins") }
+                }
+            }
+        }
         Box(Modifier.weight(1f)) {
             when {
                 store.phase == AgentStore.Phase.Loading || store.phase == AgentStore.Phase.Idle -> {
@@ -104,7 +117,7 @@ fun AgentPage(
                         onAction = { scope.launch { store.loadTeams() } },
                     )
                 }
-                store.conversations.isEmpty() -> {
+                store.conversations.isEmpty() && pins.isEmpty() -> {
                     EmptyState(
                         icon = Icons.Outlined.ChatBubbleOutline,
                         title = if (store.search.isEmpty()) "No chats yet" else "No matches",
@@ -117,8 +130,23 @@ fun AgentPage(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(store.conversations, key = { it.sessionId }) { conversation ->
-                            ConversationRow(conversation) {
+                        if (pins.isNotEmpty()) {
+                            item(key = "pins:header") { Text("Pinned", style = MaterialTheme.typography.titleSmall) }
+                            items(pins, key = { it.listKey }) { pin ->
+                                Card(Modifier.fillMaxWidth().clickable {
+                                    store.session(pin.sessionId, pin.title)
+                                    nav.navigate("conversation/${android.net.Uri.encode(pin.sessionId)}")
+                                }) {
+                                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.PushPin, contentDescription = "Pinned chat")
+                                        Text(pin.title, Modifier.padding(start = 12.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                            item(key = "history:header") { Text("History", style = MaterialTheme.typography.titleSmall) }
+                        }
+                        items(store.conversations, key = { "history:${it.sessionId}" }) { conversation ->
+                            ConversationRow(conversation, store.favorites?.contains(conversation.sessionId) == true) {
                                 nav.navigate("conversation/${conversation.sessionId}")
                             }
                         }
@@ -155,7 +183,7 @@ fun AgentPage(
 }
 
 @Composable
-private fun ConversationRow(conversation: AgentConversation, onClick: () -> Unit) {
+private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -178,6 +206,9 @@ private fun ConversationRow(conversation: AgentConversation, onClick: () -> Unit
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(conversation.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(meta(conversation), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (pinned) {
+                Icon(Icons.Outlined.PushPin, contentDescription = "Pinned chat", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
             }
             if (conversation.isArchived) {
                 Icon(Icons.Outlined.Archive, contentDescription = "Archived", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))

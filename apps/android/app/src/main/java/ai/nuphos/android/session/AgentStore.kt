@@ -63,6 +63,19 @@ class AgentStore(
     var favoritesError by mutableStateOf<String?>(null)
         private set
 
+    private val favoritesRequests = PinnedHistory.Requests()
+    var favoritesLoading by mutableStateOf(false)
+        private set
+    val pinnedShortcuts: List<PinnedHistory.Shortcut>
+        get() = if (hasAiAccess()) PinnedHistory.shortcuts(favorites, search, archivedOnly) else emptyList()
+
+    private fun clearFavorites() {
+        favoritesRequests.invalidate()
+        favorites = null
+        favoritesError = null
+        favoritesLoading = false
+    }
+
     fun updateArchivedOnly(value: Boolean) {
         if (value == archivedOnly) return
         archivedOnly = value
@@ -70,19 +83,27 @@ class AgentStore(
     }
     suspend fun loadFavorites() {
         val team = selectedTeam ?: return
+        if (!hasAiAccess()) return
+        val ticket = favoritesRequests.begin(team.id)
+        favoritesLoading = true
         try {
             val loaded = ConversationActions.favorites(token, team.id)
-            if (selectedTeam?.id != team.id) return
+            if (!favoritesRequests.accepts(ticket, selectedTeam?.id, hasAiAccess())) return
             favorites = loaded
             favoritesError = null
         } catch (e: Exception) {
-            if (selectedTeam?.id == team.id) favoritesError = e.message
+            if (favoritesRequests.accepts(ticket, selectedTeam?.id, hasAiAccess()))
+                favoritesError = e.message ?: "Could not load pinned chats."
+        } finally {
+            if (favoritesRequests.accepts(ticket, selectedTeam?.id, hasAiAccess())) favoritesLoading = false
         }
     }
     suspend fun pin(session: ChatSession, pinned: Boolean) {
-        require(selectedTeam?.id == session.teamId && session.loaded && session.loadError == null)
+        require(hasAiAccess() && selectedTeam?.id == session.teamId && session.loaded && session.loadError == null)
+        val ticket = favoritesRequests.begin(session.teamId)
+        favoritesLoading = false
         val saved = ConversationActions.pin(token, session.teamId, session.sessionId, session.title, pinned)
-        if (selectedTeam?.id == session.teamId) { favorites = saved; favoritesError = null }
+        if (favoritesRequests.accepts(ticket, selectedTeam?.id, hasAiAccess())) { favorites = saved; favoritesError = null }
     }
     suspend fun rename(session: ChatSession, title: String) {
         require(session.canManage) { "Only the owner can rename this chat." }
@@ -112,7 +133,8 @@ class AgentStore(
     private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var searchJob: Job? = null
     private var loadGeneration = 0
-    private val sessions = mutableMapOf<String, ChatSession>()
+    private data class SessionKey(val teamId: String, val sessionId: String)
+    private val sessions = mutableMapOf<SessionKey, ChatSession>()
     private val hasAiAccess = AiAccess.bind(token)
 
     init {
@@ -172,8 +194,7 @@ class AgentStore(
             val pick = loaded.firstOrNull { it.id == remembered } ?: loaded.firstOrNull()
             if (pick != selectedTeam) {
                 selectedTeam = pick
-                favorites = null
-                favoritesError = null
+                clearFavorites()
                 credentialCatalog = null
                 restoreCredentialSelection()
                 reload()
@@ -193,8 +214,7 @@ class AgentStore(
     fun select(team: Team) {
         if (team == selectedTeam) return
         selectedTeam = team
-        favorites = null
-        favoritesError = null
+        clearFavorites()
         prefs.edit().putString(LAST_TEAM_KEY, team.id).apply()
         credentialCatalog = null
         restoreCredentialSelection()
@@ -262,7 +282,7 @@ class AgentStore(
     }
 
     fun session(forConversation: AgentConversation): ChatSession {
-        return sessions.getOrPut(forConversation.sessionId) {
+        return sessions.getOrPut(SessionKey(forConversation.teamId ?: selectedTeam?.id.orEmpty(), forConversation.sessionId)) {
             ChatSession(
                 token = token,
                 teamId = forConversation.teamId ?: selectedTeam?.id.orEmpty(),
@@ -273,7 +293,7 @@ class AgentStore(
     }
 
     fun session(sessionId: String, title: String): ChatSession {
-        return sessions.getOrPut(sessionId) {
+        return sessions.getOrPut(SessionKey(selectedTeam?.id.orEmpty(), sessionId)) {
             ChatSession(
                 token = token,
                 teamId = selectedTeam?.id.orEmpty(),
@@ -288,11 +308,12 @@ class AgentStore(
         val session = ChatSession.fresh(token, team.id)
         session.presetPermissionMode(permissionMode)
         session.credentialAccess = if (credentialSelection.isEmpty) null else credentialSelection
-        sessions[session.sessionId] = session
+        sessions[SessionKey(team.id, session.sessionId)] = session
         return session
     }
 
     fun disposeForConsent() {
+        clearFavorites()
         storeScope.coroutineContext[Job]?.cancel()
         sessions.values.forEach { it.disposeForConsent() }
         sessions.clear()
