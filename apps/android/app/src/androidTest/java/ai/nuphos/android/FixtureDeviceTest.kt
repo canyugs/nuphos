@@ -17,7 +17,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import ai.nuphos.android.data.Http
 import ai.nuphos.android.data.JsonValue
 import ai.nuphos.android.model.*
+import ai.nuphos.android.session.AiAccess
+import ai.nuphos.android.session.AuthSession
 import ai.nuphos.android.session.AgentStore
+import ai.nuphos.android.ui.LocalAuthSession
 import ai.nuphos.android.ui.LocalAgentStore
 import ai.nuphos.android.ui.chat.ConversationScreen
 import ai.nuphos.android.ui.theme.NuphosTheme
@@ -38,6 +41,9 @@ class FixtureDeviceTest {
     private var status = 200
     private var detail = AgentConversationDetail(title = "Synthetic acceptance fixture")
     private lateinit var store: AgentStore
+    private lateinit var auth: AuthSession
+    private var savedAccess: Any? = null
+    @Suppress("UNCHECKED_CAST") private fun accessState() = AiAccess::class.java.getDeclaredField("state").also { it.isAccessible = true }.get(AiAccess) as MutableState<Any?>
     private var returned = false
     private var externalLink: String? = null
 
@@ -56,12 +62,24 @@ class FixtureDeviceTest {
             originals[name] = field.get(null) as OkHttpClient
             field.set(null, mock)
         }
+        compose.runOnIdle {
+            savedAccess = accessState().value
+            AiAccess.activate("synthetic-no-credentials")
+            AiAccess.grant("synthetic-no-credentials")
+            val app = compose.activity.application as NuphosApplication
+            auth = AuthSession(app, app.tokenStore)
+            AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(auth, "synthetic-no-credentials")
+            @Suppress("UNCHECKED_CAST")
+            val state = AuthSession::class.java.getDeclaredField("state\$delegate").also { it.isAccessible = true }.get(auth) as MutableState<AuthSession.State>
+            state.value = AuthSession.State.SignedIn(NuphosUser("acceptance-fixture", "acceptance@example.invalid", "Acceptance fixture"))
+        }
         store = AgentStore("synthetic-no-credentials", compose.activity)
         @Suppress("UNCHECKED_CAST")
         val selected = AgentStore::class.java.getDeclaredField("selectedTeam\$delegate").also { it.isAccessible = true }.get(store) as MutableState<Team?>
         selected.value = Team("synthetic-team", "Acceptance fixture")
     }
     @After fun restoreNetwork() {
+        compose.runOnIdle { compose.activity.setContent { }; store.disposeForConsent(); accessState().value = savedAccess }
         for ((name, client) in originals) Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client)
     }
     private fun render(parts: List<ChatPart>, readOnly: Boolean = false) {
@@ -69,7 +87,7 @@ class FixtureDeviceTest {
         compose.runOnIdle {
             compose.activity.setContent {
                 NuphosTheme {
-                    CompositionLocalProvider(LocalAgentStore provides store, LocalUriHandler provides object : UriHandler {
+                    CompositionLocalProvider(LocalAgentStore provides store, LocalAuthSession provides auth, LocalUriHandler provides object : UriHandler {
                         override fun openUri(uri: String) { externalLink = uri }
                     }) {
                         val nav = rememberNavController()

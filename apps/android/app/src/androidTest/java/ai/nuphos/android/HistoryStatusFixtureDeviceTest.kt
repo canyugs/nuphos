@@ -43,6 +43,17 @@ class HistoryStatusFixtureDeviceTest {
     private lateinit var auth: AuthSession
     private lateinit var app: NuphosApplication
     private var savedAccess: Any? = null
+    private val work = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var savedLastTeam: String? = null
+    @Volatile private var failList = false
+    @Volatile private var holdNextList = false
+    private val listHeld = CountDownLatch(1)
+    private val listRelease = CountDownLatch(1)
+    @Volatile private var listActivity = 4L
+    @Volatile private var listRead = 1L
+    @Volatile private var readActivity = 4L
+    @Volatile private var listTitle = "History fixture"
+    @Volatile private var backgroundPhase = false
     @Volatile private var owner = true
     @Volatile private var failDetail = false
     @Volatile private var failRead = false
@@ -62,6 +73,7 @@ class HistoryStatusFixtureDeviceTest {
     private val network = object : ExternalResource() {
         override fun before() {
             app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as NuphosApplication
+            savedLastTeam = app.getSharedPreferences("nuphos.prefs", Context.MODE_PRIVATE).getString("nuphos.workspace.lastTeamId", null)
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 savedAccess = state(AiAccess, "state", false).value
                 AiAccess.activate(token)
@@ -70,8 +82,17 @@ class HistoryStatusFixtureDeviceTest {
                 val req = chain.request(); requests += req
                 var code = 200
                 val body = when (req.url.encodedPath) {
-                    "/teams/A/favorites" -> """{"revision":1,"entries":[]}"""
-                    "/agent/conversations" -> Http.json.encodeToString(AgentConversationsPage.serializer(), AgentConversationsPage(listOf(row())))
+                    "/teams/A/favorites", "/teams/B/favorites" -> """{"revision":1,"entries":[]}"""
+                    "/agent/auto-mode/bypass" -> """{"bypass":false}"""
+                    "/agent/conversations" -> {
+                        val team = req.url.queryParameter("teamId") ?: "A"
+                        val snapshot = row(listActivity).copy(teamId = team, title = if (team == "A") listTitle else "Team B history",
+                            readSeq = JsonValue.Number(listRead.toDouble()), unread = JsonValue.Bool(owner && listActivity > listRead),
+                            runtimeState = if (backgroundPhase) JsonValue.parse("""{"schemaVersion":2,"state":"active","phase":"background_tools","epoch":"a","revision":2}""") else row().runtimeState)
+                        val fail = failList
+                        if (holdNextList) { holdNextList = false; listHeld.countDown(); check(listRelease.await(10, TimeUnit.SECONDS)) }
+                        if (fail) { code = 503; "{}" } else Http.json.encodeToString(AgentConversationsPage.serializer(), AgentConversationsPage(listOf(snapshot)))
+                    }
                     "/agent/conversations/saved" -> {
                         if (holdDetail) { detailHeld.countDown(); check(detailRelease.await(10, TimeUnit.SECONDS)) }
                         detailReturned.countDown()
@@ -86,7 +107,7 @@ class HistoryStatusFixtureDeviceTest {
                         assertEquals("A", payload["teamId"]?.stringValue)
                         assertEquals(4.0, payload["seq"]?.numberValue)
                         if (holdRead) { held.countDown(); check(release.await(10, TimeUnit.SECONDS)) }
-                        if (failRead) { code = 503; "{}" } else """{"activitySeq":4,"readSeq":4,"unread":false}"""
+                        if (failRead) { code = 503; "{}" } else """{"activitySeq":$readActivity,"readSeq":4,"unread":${readActivity > 4}}"""
                     }
                     else -> { code = 404; "{}" }
                 }
@@ -101,20 +122,25 @@ class HistoryStatusFixtureDeviceTest {
         override fun after() {
             release.countDown()
             detailRelease.countDown()
+            listRelease.countDown()
+            work.cancel()
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 if (::store.isInitialized) store.disposeForConsent()
                 state(AiAccess, "state", false).value = savedAccess
+                val editor = app.getSharedPreferences("nuphos.prefs", Context.MODE_PRIVATE).edit()
+                if (savedLastTeam == null) editor.remove("nuphos.workspace.lastTeamId") else editor.putString("nuphos.workspace.lastTeamId", savedLastTeam)
+                editor.commit()
             }
             originals.forEach { (name, client) -> Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client) }
         }
     }
     @get:Rule val rules: RuleChain = RuleChain.outerRule(network).around(compose)
-    private fun render() {
+    private fun render(expectHistory: Boolean = true) {
         compose.runOnIdle {
             AiAccess.grant(token)
             store = AgentStore(token, compose.activity)
             state(store, "selectedTeam").value = Team("A", "Fixture A")
-            state(store, "phase").value = AgentStore.Phase.Loaded
+            state(store, "phase").value = AgentStore.Phase.Idle
             auth = AuthSession(app, app.tokenStore)
             AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(auth, token)
             compose.activity.setContent {
@@ -129,10 +155,8 @@ class HistoryStatusFixtureDeviceTest {
                 } }
             }
         }
-        val work = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         compose.runOnIdle { work.launch { store.reload() } }
-        waitText("History fixture")
-        work.cancel()
+        waitText(if (expectHistory) "History fixture" else "Couldn't load chats")
     }
     private fun waitText(text: String) { compose.waitUntil(5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
     private fun readCount() = requests.count { it.url.encodedPath.endsWith("/read") }
@@ -147,6 +171,113 @@ class HistoryStatusFixtureDeviceTest {
         waitText("Displayed owner transcript")
         compose.waitUntil(5_000) { readCount() == 1 }
         compose.waitUntil(5_000) { !HistoryStatus.unread(store.conversations.single()) }
+    }
+    private fun refresh(): Job {
+        lateinit var job: Job
+        compose.runOnIdle { job = work.launch { store.reload() } }
+        return job
+    }
+    private fun assertKnownRequests() {
+        val allowed = setOf("/teams/A/favorites", "/teams/B/favorites", "/agent/auto-mode/bypass", "/agent/conversations", "/agent/conversations/saved", "/agent/conversations/saved/read")
+        assertTrue(requests.filter { it.header("Authorization") == "Bearer $token" }.all { it.url.encodedPath in allowed })
+    }
+    @Test fun activeBackgroundAndUnreadStillShowsRunning() {
+        backgroundPhase = true; render()
+        compose.onNodeWithText("Running").assertIsDisplayed()
+        compose.onNodeWithText("Background tools").assertDoesNotExist()
+        compose.onNodeWithText("Unread").assertDoesNotExist()
+        assertKnownRequests()
+    }
+    @Test fun failedRefreshRetainsHistoryWithRetryAndExpiredRuntime() {
+        render(); failList = true
+        val job = refresh()
+        compose.waitUntil(5_000) { job.isCompleted }
+        waitText("Could not refresh chats. Showing last loaded history.")
+        compose.onNodeWithText("History fixture").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't load chats").assertDoesNotExist()
+        android.os.SystemClock.sleep(12_100)
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Running").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("Unread").assertIsDisplayed()
+        failList = false
+        compose.onNodeWithText("Retry history").performClick()
+        compose.waitUntil(5_000) { store.phaseError == null }
+        compose.onNodeWithText("Running").assertIsDisplayed()
+        assertKnownRequests()
+    }
+    @Test fun initialFailureHasNoRetainedHistoryBanner() {
+        failList = true; render(expectHistory = false)
+        compose.onNodeWithText("Couldn't load chats").assertIsDisplayed()
+        compose.onNodeWithText("History fixture").assertDoesNotExist()
+        compose.onNodeWithText("Retry history").assertDoesNotExist()
+        assertKnownRequests()
+    }
+    @Test fun queryTransitionsDropUnrelatedRetainedRows() {
+        render(); failList = true
+        compose.runOnIdle { store.updateSearch("different"); assertTrue(store.conversations.isEmpty()) }
+        waitText("Couldn't load chats")
+        compose.onNodeWithText("History fixture").assertDoesNotExist()
+        compose.runOnIdle { store.updateScope(ConversationScope.Team); assertTrue(store.conversations.isEmpty()) }
+        waitText("Couldn't load chats")
+        compose.runOnIdle { store.updateArchivedOnly(true); assertTrue(store.conversations.isEmpty()) }
+        waitText("Couldn't load chats")
+        compose.onNodeWithText("Retry history").assertDoesNotExist()
+        assertKnownRequests()
+    }
+    private fun delayedListAfterRead(newer: Boolean) {
+        render(); holdNextList = true
+        val job = refresh()
+        compose.waitUntil(5_000) { listHeld.count == 0L }
+        if (newer) readActivity = 8
+        compose.onNodeWithText("History fixture").performClick(); waitText("Displayed owner transcript")
+        compose.waitUntil(5_000) { HistoryStatus.sequence(store.conversations.single().readSeq) == 4L }
+        if (newer) assertEquals(8L, HistoryStatus.sequence(store.conversations.single().activitySeq))
+        listRelease.countDown()
+        compose.waitUntil(5_000) { job.isCompleted }
+        assertEquals(4L, HistoryStatus.sequence(store.conversations.single().readSeq))
+        assertEquals(if (newer) 8L else 4L, HistoryStatus.sequence(store.conversations.single().activitySeq))
+        assertEquals(newer, HistoryStatus.unread(store.conversations.single()))
+        assertKnownRequests()
+    }
+    @Test fun heldListCannotUndoConfirmedOwnerRead() = delayedListAfterRead(false)
+    @Test fun heldListCannotEraseNewerUnreadActivity() = delayedListAfterRead(true)
+    @Test fun heldLoadMoreCannotUndoConfirmedOwnerRead() {
+        render()
+        compose.runOnIdle {
+            holdNextList = true
+            AgentStore::class.java.getDeclaredField("nextCursor").also { it.isAccessible = true }.set(store, "next")
+            state(store, "hasMore").value = true
+            work.launch { store.loadMore() }
+        }
+        compose.waitUntil(5_000) { listHeld.count == 0L }
+        compose.onNodeWithText("History fixture").performClick(); waitText("Displayed owner transcript")
+        compose.waitUntil(5_000) { HistoryStatus.sequence(store.conversations.single().readSeq) == 4L }
+        listRelease.countDown()
+        compose.waitUntil(5_000) { !store.isLoadingMore }
+        assertEquals(1, store.conversations.size)
+        assertEquals(4L, HistoryStatus.sequence(store.conversations.single().readSeq))
+        assertFalse(HistoryStatus.unread(store.conversations.single()))
+        assertKnownRequests()
+    }
+    @Test fun teamRoundTripRejectsLateListAndResetsReadProgress() {
+        render()
+        compose.onNodeWithText("History fixture").performClick(); waitText("Displayed owner transcript")
+        compose.waitUntil(5_000) { HistoryStatus.sequence(store.conversations.single().readSeq) == 4L }
+        compose.onNodeWithContentDescription("Back").performClick(); waitText("History fixture")
+        holdNextList = true
+        val job = refresh()
+        compose.waitUntil(5_000) { listHeld.count == 0L }
+        compose.runOnIdle { store.select(Team("B", "Fixture B")); assertTrue(store.conversations.isEmpty()); assertNull(store.phaseError) }
+        waitText("Team B history")
+        compose.onNodeWithText("History fixture").assertDoesNotExist()
+        listTitle = "Returned A history"
+        compose.runOnIdle { store.select(Team("A", "Fixture A")); assertTrue(store.conversations.isEmpty()) }
+        waitText("Returned A history")
+        listRelease.countDown()
+        compose.waitUntil(5_000) { job.isCompleted }
+        assertEquals("A", store.conversations.single().teamId)
+        assertEquals("Returned A history", store.conversations.single().title)
+        assertEquals(1L, HistoryStatus.sequence(store.conversations.single().readSeq))
+        assertKnownRequests()
     }
     @Test fun sharedTranscriptNeverAcknowledges() {
         owner = false; render()

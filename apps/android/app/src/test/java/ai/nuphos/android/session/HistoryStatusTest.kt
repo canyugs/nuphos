@@ -15,11 +15,17 @@ class HistoryStatusTest {
         assertEquals("Running", HistoryStatus.observe(row, 10.0).label(21.999))
         assertNull(HistoryStatus.observe(row, 10.0).label(22.0))
         assertEquals("Paused", HistoryStatus.observe(row(phase = "resume_disconnected"), 10.0).label(11.0))
-        assertEquals("Background tools", HistoryStatus.observe(row("idle", "background_tools"), 10.0).label(11.0))
+        assertEquals("Background tools", HistoryStatus.observe(row("idle", "background_tools").copy(activeRun = null), 10.0).label(11.0))
         assertNull(HistoryStatus.observe(row("unknown"), 10.0).label(11.0))
         assertFalse(HistoryStatus.unread(row.copy(isOwner = false)))
         assertNull(HistoryStatus.sequence(JsonValue.Number(1.5)))
         assertNull(HistoryStatus.sequence(JsonValue.Number(9007199254740992.0)))
+    }
+    @Test fun activeExecutionOutranksCompetingBackgroundAndUnread() {
+        val competing = row(phase = "background_tools")
+        assertTrue(HistoryStatus.unread(competing))
+        assertEquals("Running", HistoryStatus.observe(competing, 10.0).label(11.0))
+        assertEquals("Paused", HistoryStatus.observe(row(phase = "resume_disconnected"), 10.0).label(11.0))
     }
     @Test fun runtimeOrderingRetainsEpochAndRevisionRules() {
         val current = HistoryStatus.observe(row(), 10.0)
@@ -33,6 +39,31 @@ class HistoryStatusTest {
         assertTrue(HistoryStatus.unread(merged))
         assertEquals(4L, HistoryStatus.sequence(merged.readSeq))
         assertEquals(8L, HistoryStatus.sequence(merged.activitySeq))
+    }
+    @Test fun delayedOwnerListPreservesConfirmedReadAndNewerActivity() {
+        val incoming = row().copy(teamId = "team")
+        val confirmed = HistoryStatus.mergeRead(incoming, 4, 4, 4)
+        val merged = HistoryStatus.mergeList(incoming, confirmed, "team")
+        assertEquals(4L, HistoryStatus.sequence(merged.readSeq))
+        assertFalse(HistoryStatus.unread(merged))
+        val newer = confirmed.copy(activitySeq = JsonValue.Number(8.0), unread = JsonValue.Bool(true))
+        val retained = HistoryStatus.mergeList(incoming, newer, "team")
+        assertEquals(8L, HistoryStatus.sequence(retained.activitySeq))
+        assertEquals(4L, HistoryStatus.sequence(retained.readSeq))
+        assertTrue(HistoryStatus.unread(retained))
+    }
+    @Test fun ownerListMergeNeverCrossesTargetsOrGrantsNonownerFields() {
+        val incoming = row().copy(teamId = "team")
+        val confirmed = HistoryStatus.mergeRead(incoming, 4, 4, 4)
+        assertEquals(incoming, HistoryStatus.mergeList(incoming, confirmed.copy(teamId = "other"), "team"))
+        assertEquals(incoming, HistoryStatus.mergeList(incoming, confirmed.copy(sessionId = "other"), "team"))
+        assertEquals(incoming, HistoryStatus.mergeList(incoming, confirmed.copy(isOwner = false), "team"))
+        val shared = incoming.copy(isOwner = false, activitySeq = null, readSeq = null, unread = JsonValue.Bool(false))
+        assertEquals(shared, HistoryStatus.mergeList(shared, confirmed, "team"))
+        val invalid = incoming.copy(activitySeq = JsonValue.Number(1.5), readSeq = JsonValue.Number(-1.0))
+        assertEquals(4L, HistoryStatus.sequence(HistoryStatus.mergeList(invalid, confirmed, "team").readSeq))
+        assertEquals(incoming, HistoryStatus.mergeList(incoming, invalid, "team"))
+        assertEquals(incoming, HistoryStatus.mergeList(incoming, confirmed.copy(readSeq = JsonValue.Number(9007199254740992.0)), "team"))
     }
     @Test fun displayedCoordinatorRejectsHiddenLateAndFutureAndBoundsRetries() {
         val reads = ConversationReads()

@@ -110,6 +110,12 @@ fun AgentPage(
                 }
             }
         }
+        if (store.phase == AgentStore.Phase.Loaded && store.phaseError != null) {
+            Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Could not refresh chats. Showing last loaded history.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { scope.launch { store.reload() } }) { Text("Retry history") }
+            }
+        }
         Box(Modifier.weight(1f)) {
             when {
                 store.phase == AgentStore.Phase.Loading || store.phase == AgentStore.Phase.Idle -> {

@@ -16,14 +16,29 @@ object HistoryStatus {
             if (state !in setOf("active", "idle", "dormant", "interrupted")) return null
             return when {
                 runtime.phase == "resume_disconnected" -> "Paused"
-                runtime.phase == "background_tools" -> "Background tools"
                 state == "active" || activeRun -> "Running"
+                runtime.phase == "background_tools" -> "Background tools"
                 else -> null
             }
         }
     }
     fun observe(row: AgentConversation, at: Double) = Observation(
         RuntimeObservation(row.runtimeState ?: JsonValue.obj(), at), row.activeRun?.get("streamId")?.stringValue?.isNotBlank() == true)
+    /** Only current-target owner values observed from the server can survive a delayed page. */
+    fun mergeList(incoming: AgentConversation, current: AgentConversation?, teamId: String): AgentConversation {
+        if (incoming.isOwner != true || current?.isOwner != true || incoming.sessionId != current.sessionId ||
+            (incoming.teamId ?: teamId) != teamId || (current.teamId ?: teamId) != teamId) return incoming
+        fun valid(row: AgentConversation): Pair<Long, Long>? {
+            val activity = sequence(row.activitySeq) ?: return null
+            val read = sequence(row.readSeq) ?: return null
+            return if (read <= activity) activity to read else null
+        }
+        val known = valid(current) ?: return incoming
+        val next = valid(incoming)
+        val activity = maxOf(known.first, next?.first ?: 0)
+        val read = maxOf(known.second, next?.second ?: 0)
+        return incoming.copy(activitySeq = JsonValue.Number(activity.toDouble()), readSeq = JsonValue.Number(read.toDouble()), unread = JsonValue.Bool(activity > read))
+    }
     fun mergeRead(row: AgentConversation, requested: Long, activity: Long, read: Long): AgentConversation {
         if (row.isOwner != true) return row
         val knownActivity = sequence(row.activitySeq) ?: return row

@@ -96,9 +96,26 @@ class AgentStore(
         favoritesLoading = false
     }
 
+    private fun resetHistory() {
+        loadGeneration++
+        conversations = emptyList()
+        nextCursor = null
+        hasMore = false
+        isLoadingMore = false
+        phase = Phase.Idle
+        phaseError = null
+        historyObservations.clear()
+        historyRevision++
+    }
+    private fun mergeHistory(rows: List<AgentConversation>, teamId: String) = rows.map { incoming ->
+        HistoryStatus.mergeList(incoming, conversations.firstOrNull {
+            it.sessionId == incoming.sessionId && (it.teamId ?: teamId) == (incoming.teamId ?: teamId)
+        }, teamId)
+    }
     fun updateArchivedOnly(value: Boolean) {
         if (value == archivedOnly) return
         archivedOnly = value
+        resetHistory()
         storeScope.launch { reload() }
     }
     suspend fun loadFavorites() {
@@ -168,12 +185,14 @@ class AgentStore(
     fun updateScope(value: ConversationScope) {
         if (value == scope) return
         scope = value
+        resetHistory()
         storeScope.launch { reload() }
     }
 
     fun updateSearch(value: String) {
         if (value == search) return
         search = value
+        resetHistory()
         searchJob?.cancel()
         searchJob = storeScope.launch {
             delay(250)
@@ -214,6 +233,7 @@ class AgentStore(
             val pick = loaded.firstOrNull { it.id == remembered } ?: loaded.firstOrNull()
             if (pick != selectedTeam) {
                 selectedTeam = pick
+                resetHistory()
                 clearFavorites()
                 credentialCatalog = null
                 restoreCredentialSelection()
@@ -234,8 +254,7 @@ class AgentStore(
     fun select(team: Team) {
         if (team == selectedTeam) return
         selectedTeam = team
-        historyObservations.clear()
-        historyRevision++
+        resetHistory()
         clearFavorites()
         prefs.edit().putString(LAST_TEAM_KEY, team.id).apply()
         credentialCatalog = null
@@ -246,12 +265,13 @@ class AgentStore(
     suspend fun reload() {
         val team = selectedTeam
         if (team == null) {
-            conversations = emptyList()
+            resetHistory()
             if (teamsPhase == Phase.Loaded) phase = Phase.Loaded
             return
         }
         loadGeneration += 1
         val generation = loadGeneration
+        val hasLoadedHistory = phase == Phase.Loaded || conversations.isNotEmpty()
         if (conversations.isEmpty()) phase = Phase.Loading
         try {
             val observedAt = RuntimeObservation.now()
@@ -263,16 +283,16 @@ class AgentStore(
                 search = search,
                 archivedOnly = archivedOnly,
             )
-            if (generation != loadGeneration) return
+            if (generation != loadGeneration || selectedTeam?.id != team.id || !hasAiAccess()) return
             observeHistory(page.conversations, team.id, observedAt)
-            conversations = page.conversations
+            conversations = mergeHistory(page.conversations, team.id)
             nextCursor = page.nextCursor
             hasMore = page.hasMore
             phase = Phase.Loaded
             phaseError = null
         } catch (e: Exception) {
-            if (generation != loadGeneration) return
-            phase = Phase.Failed
+            if (generation != loadGeneration || selectedTeam?.id != team.id || !hasAiAccess()) return
+            phase = if (hasLoadedHistory) Phase.Loaded else Phase.Failed
             phaseError = e.message
         }
     }
@@ -294,16 +314,19 @@ class AgentStore(
                 search = search,
                 archivedOnly = archivedOnly,
             )
-            if (generation != loadGeneration) return
+            if (generation != loadGeneration || selectedTeam?.id != team.id || !hasAiAccess()) return
             observeHistory(page.conversations, team.id, observedAt)
+            val merged = mergeHistory(page.conversations, team.id)
             val seen = conversations.map { it.sessionId }.toSet()
-            conversations = conversations + page.conversations.filter { it.sessionId !in seen }
+            conversations = conversations.map { current ->
+                merged.firstOrNull { it.sessionId == current.sessionId && (it.teamId ?: team.id) == (current.teamId ?: team.id) } ?: current
+            } + merged.filter { it.sessionId !in seen }
             nextCursor = page.nextCursor
             hasMore = page.hasMore
         } catch (_: Exception) {
             // Leave what we have.
         } finally {
-            isLoadingMore = false
+            if (generation == loadGeneration) isLoadingMore = false
         }
     }
 
@@ -339,8 +362,7 @@ class AgentStore(
     }
 
     fun disposeForConsent() {
-        historyObservations.clear()
-        historyRevision++
+        resetHistory()
         clearFavorites()
         storeScope.coroutineContext[Job]?.cancel()
         sessions.values.forEach { it.disposeForConsent() }
