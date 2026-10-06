@@ -134,7 +134,6 @@ fun AgentPage(
                             item(key = "pins:header") { Text("Pinned", style = MaterialTheme.typography.titleSmall) }
                             items(pins, key = { it.listKey }) { pin ->
                                 Card(Modifier.fillMaxWidth().clickable {
-                                    store.session(pin.sessionId, pin.title)
                                     nav.navigate("conversation/${android.net.Uri.encode(pin.sessionId)}")
                                 }) {
                                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
