@@ -109,12 +109,19 @@ class SigningTest(unittest.TestCase):
                 self.env[field] = old
 
     def test_changed_input_or_provenance_fails(self):
+        original = self.bundle.read_bytes()
         with zipfile.ZipFile(self.bundle, 'a') as archive:
             archive.writestr('extra', 'changed')
         self.assertNotEqual(self.run_sign().returncode, 0)
         self.assertFalse((self.directory / 'android-signed').exists())
-        self.env['GITHUB_SHA'] = 'b' * 40
-        self.assertNotEqual(self.run_sign().returncode, 0)
+        self.bundle.write_bytes(original)
+        for field, value in (('GITHUB_SHA', 'b' * 40), ('GITHUB_RUN_ATTEMPT', '2')):
+            with self.subTest(field=field):
+                old = self.env[field]
+                self.env[field] = value
+                self.assertNotEqual(self.run_sign().returncode, 0)
+                self.assertFalse((self.directory / 'android-signed').exists())
+                self.env[field] = old
 
     def test_verifier_rejects_tampering_and_unsigned_additions(self):
         self.assertEqual(self.run_sign().returncode, 0)
