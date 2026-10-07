@@ -7,8 +7,8 @@ directly like a debug APK.
 
 ## Administrator setup
 
-Complete [NUPS-949](https://linear.app/zeabur/issue/NUPS-949/set-up-android-play-account-upload-key-custody-and-protected-ci)
-before production signing. In the official `nuphos/nuphos` repository:
+Before production signing, a repository administrator must complete this setup
+in the official `nuphos/nuphos` repository:
 
 - Protect `main`. Review release source and its checks before starting a run.
 - Create the `android-release` Environment. Require an authorized maintainer's
