@@ -4,6 +4,16 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val releaseVersionCode = providers.gradleProperty("nuphosVersionCode").orElse("1").get()
+val releaseVersionName = providers.gradleProperty("nuphosVersionName").orElse("1.0").get()
+require(releaseVersionCode.matches(Regex("[1-9][0-9]{0,9}")) &&
+    (releaseVersionCode.toLongOrNull() ?: Long.MAX_VALUE) <= 2100000000L) {
+    "nuphosVersionCode must be an integer from 1 to 2100000000 without leading zeros"
+}
+require(releaseVersionName.matches(Regex("[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}"))) {
+    "nuphosVersionName must contain 1-64 filename-safe characters"
+}
+
 android {
     namespace = "ai.nuphos.android"
     compileSdk = 37
@@ -12,8 +22,8 @@ android {
         applicationId = "ai.nuphos.android"
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = releaseVersionCode.toInt()
+        versionName = releaseVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

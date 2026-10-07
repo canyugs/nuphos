@@ -106,3 +106,6 @@ sign-in UI or callback. Verify browser login, cancellation, restart restore and
 sign-out separately on a dedicated test device. Keep live credentials out of
 public PR CI; live tests require explicit opt-in. Do not automatically log in a
 personal phone or run data-changing tests against a personal account.
+
+For signed AAB artifact CI, version inputs and administrator prerequisites, see
+[Android release artifacts](RELEASE.md).
