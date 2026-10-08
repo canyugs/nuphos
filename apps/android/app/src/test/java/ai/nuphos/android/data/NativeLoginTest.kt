@@ -14,6 +14,8 @@ import java.net.URI
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
 
 class NativeLoginTest {
@@ -157,4 +159,38 @@ class NativeLoginTest {
             assertNull(fixture.redeemed)
         }
     }
+    @Test fun tricklingHeadersCannotBlockLegitimateDeliveryPastReadBudget() {
+        val fixture = Fixture()
+        NativeLogin(fixture.client, timeoutMs = 8_000).use { login ->
+            login.register()
+            val executor = Executors.newFixedThreadPool(2)
+            val dripping = AtomicBoolean(true)
+            val started = CountDownLatch(1)
+            val port = URI(fixture.registration!!["redirectUri"]!!.jsonPrimitive.content).port
+            val socket = Socket("127.0.0.1", port)
+            try {
+                val result = executor.submit<String> { login.awaitToken() }
+                executor.submit {
+                    try {
+                        while (dripping.get()) {
+                            socket.getOutputStream().write('G'.code)
+                            socket.getOutputStream().flush()
+                            started.countDown()
+                            Thread.sleep(100)
+                        }
+                    } catch (_: IOException) { }
+                }
+                assertTrue(started.await(1, TimeUnit.SECONDS))
+                Thread.sleep(1_250)
+                assertFalse(login.receivedCallback)
+                assertTrue(fixture.hit(fixture.delivery()).startsWith("HTTP/1.1 200"))
+                assertEquals("synthetic-session-token", result.get(3, TimeUnit.SECONDS))
+            } finally {
+                dripping.set(false)
+                socket.close()
+                executor.shutdownNow()
+            }
+        }
+    }
+
 }

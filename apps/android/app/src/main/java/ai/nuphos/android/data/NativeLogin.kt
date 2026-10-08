@@ -128,7 +128,11 @@ class NativeLogin internal constructor(
     private fun readRequestLine(socket: Socket): String? {
         val input = socket.getInputStream()
         val headers = StringBuilder()
+        val readDeadline = minOf(deadline, System.nanoTime() + 1_000_000_000)
         repeat(8_192) {
+            val remaining = (readDeadline - System.nanoTime()) / 1_000_000
+            if (remaining <= 0) throw SocketTimeoutException("Sign-in request timed out.")
+            socket.soTimeout = remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt().coerceAtLeast(1)
             val next = input.read()
             if (next < 0) return null
             if (next !in 32..126 && next != 13 && next != 10) return null
