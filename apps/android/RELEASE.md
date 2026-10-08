@@ -59,8 +59,7 @@ Firebase project, GCP key or automatic store-upload permission.
    duplicate entries, altered payloads and unexpected signers. A generic
    `jar verified` message alone does not prove all entries were signed.
 7. Submit manually to the approved Play test track after release acceptance.
-   This change does not approve a public rollout. PR #49's unresolved
-   login-callback and SSE review findings still need resolution.
+   This change does not approve a public rollout.
 
 ## Failure and retry
 

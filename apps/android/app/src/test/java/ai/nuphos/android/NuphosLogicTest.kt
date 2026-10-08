@@ -13,27 +13,37 @@ import java.time.Instant
 
 class NuphosLogicTest {
     @Test
-    fun loginUrlIncludesMobileState() {
-        val url = NuphosWeb.loginUrl()
-        assertTrue(url.startsWith("https://nuphos.ai/login"))
-        assertTrue(url.contains("state="))
+    fun loginUrlCarriesOnlyOpaqueHandle() {
+        val handle = "h".repeat(43)
+        assertEquals("https://nuphos.ai/api/google/start?handle=$handle", NuphosWeb.loginUrl(handle))
     }
 
     @Test
-    fun parseCallbackToken() {
-        val result = NuphosWeb.parseCallback("nuphos://google-callback?token=abc123")
-        assertEquals(NuphosWeb.CallbackResult.Token("abc123"), result)
+    fun externalAccountTokenCannotBecomeLoginDelivery() {
+        assertNull(NuphosWeb.parseDelivery("nuphos://google-callback?token=abc123", "pending"))
+        assertNull(NuphosWeb.parseDelivery("/callback?state=pending&token=abc123", "pending"))
     }
 
     @Test
-    fun parseCallbackError() {
-        val result = NuphosWeb.parseCallback("nuphos://google-callback?error=denied")
-        assertEquals(NuphosWeb.CallbackResult.Failure("denied"), result)
+    fun deliveryAcceptsBoundCodeAndProviderFailure() {
+        val code = "c".repeat(43)
+        assertEquals(NuphosWeb.CallbackResult.Code(code), NuphosWeb.parseDelivery("/callback?state=pending&code=$code", "pending"))
+        assertTrue(NuphosWeb.parseDelivery("/callback?state=pending&error=denied", "pending") is NuphosWeb.CallbackResult.Failure)
     }
 
     @Test
-    fun parseCallbackIgnoresOtherSchemes() {
-        assertNull(NuphosWeb.parseCallback("https://nuphos.ai/login"))
+    fun deliveryRejectsAmbiguousAndMalformedCallbacks() {
+        val code = "c".repeat(43)
+        for (target in listOf(
+            "/callback?state=other&code=$code", "/callback?code=$code",
+            "/callback?state=pending&state=pending&code=$code",
+            "/callback?state=pending&code=$code&code=$code",
+            "/callback?state=pending&code=$code&error=denied",
+            "/callback?state=pending&code=%ZZ", "/callback/extra?state=pending&code=$code",
+            "//evil/callback?state=pending&code=$code", "/callback?state=pending&code=$code#fragment",
+            "/callback?state=pending&%73tate=pending&code=$code",
+            "/%63allback?state=pending&code=$code",
+        )) assertNull(target, NuphosWeb.parseDelivery(target, "pending"))
     }
 
     @Test

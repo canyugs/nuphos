@@ -12,12 +12,16 @@ import androidx.compose.runtime.setValue
 import ai.nuphos.android.data.AccountApi
 import ai.nuphos.android.data.NuphosApi
 import ai.nuphos.android.data.NuphosWeb
+import ai.nuphos.android.data.NativeLogin
 import ai.nuphos.android.data.TokenStore
 import ai.nuphos.android.model.NuphosUser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -185,10 +189,11 @@ class AuthSession(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var customTabsOpen = false
-    private var receivedCallback = false
+    private var loginAttempt: NativeLogin? = null
+    private var loginJob: Job? = null
 
     fun restore() {
-        if (state is State.SignedIn && token != null) return
+        if (state is State.SigningIn || (state is State.SignedIn && token != null)) return
         val expected = beginIdentity()
         scope.launch {
             val saved = withContext(Dispatchers.IO) { tokenStore.read() }
@@ -217,60 +222,71 @@ class AuthSession(
     }
 
     fun signIn(activity: Activity) {
-        if (state is State.SigningIn) return
-        beginIdentity()
+        if (state !is State.SignedOut) return
+        val expected = beginIdentity()
         state = State.SigningIn
-        receivedCallback = false
-        customTabsOpen = true
-        val tabs = CustomTabsIntent.Builder()
-            .setShowTitle(true)
-            .setShareState(CustomTabsIntent.SHARE_STATE_OFF)
-            .build()
-        tabs.intent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
-        try {
-            tabs.launchUrl(activity, Uri.parse(NuphosWeb.loginUrl()))
-        } catch (_: ActivityNotFoundException) {
-            customTabsOpen = false
-            state = State.SignedOut("We could not open the sign-in window. Please try again.")
+        customTabsOpen = false
+        loginJob = scope.launch {
+            var attempt: NativeLogin? = null
+            try {
+                attempt = NativeLogin()
+                loginAttempt = attempt
+                val url = withContext(Dispatchers.IO) { attempt.register() }
+                if (generation != expected || state !is State.SigningIn) return@launch
+                if (activity.isFinishing || activity.isDestroyed) throw ActivityNotFoundException()
+                val tabs = CustomTabsIntent.Builder()
+                    .setShowTitle(true)
+                    .setShareState(CustomTabsIntent.SHARE_STATE_OFF)
+                    .build()
+                tabs.intent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
+                customTabsOpen = true
+                tabs.launchUrl(activity, Uri.parse(url))
+                val received = withContext(Dispatchers.IO) { attempt.awaitToken() }
+                val user = NuphosApi.currentUser(received)
+                ensureActive()
+                if (generation != expected || state !is State.SigningIn || loginAttempt !== attempt) return@launch
+                tokenStore.write(received)
+                token = received
+                AiAccess.activate(received)
+                composerDrafts.onIdentity(user.id)
+                state = State.SignedIn(user)
+                loadAIConsent()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: ActivityNotFoundException) {
+                if (generation == expected) state = State.SignedOut("We could not open the sign-in window. Please try again.")
+            } catch (_: Exception) {
+                if (generation == expected) state = State.SignedOut("Secure sign-in did not complete. Check your connection and try again.")
+            } finally {
+                attempt?.close()
+                if (loginAttempt === attempt) {
+                    loginAttempt = null
+                    loginJob = null
+                    customTabsOpen = false
+                }
+            }
         }
     }
 
-    fun handleCallback(uri: Uri): Boolean {
-        val result = NuphosWeb.parseCallback(uri) ?: return false
-        receivedCallback = true
-        customTabsOpen = false
-        when (result) {
-            is NuphosWeb.CallbackResult.Token -> complete(result.token)
-            is NuphosWeb.CallbackResult.Failure -> state = State.SignedOut(result.message)
-        }
-        return true
-    }
+    /** A browser return only changes focus. An intent can never supply identity. */
+    fun handleCallback(uri: Uri): Boolean = NuphosWeb.isReturnIntent(uri)
 
     /** Called from [Activity.onResume] after Custom Tabs returns. */
     fun onHostResumed() {
         if (state is State.SignedIn && !consentBusy) loadAIConsent()
-        if (state is State.SigningIn && customTabsOpen && !receivedCallback) {
-            customTabsOpen = false
+        if (state is State.SigningIn && customTabsOpen && loginAttempt?.receivedCallback != true) {
+            cancelLogin()
+            beginIdentity()
             state = State.SignedOut(null)
         }
     }
 
-    private fun complete(token: String) {
-        val expected = beginIdentity()
-        scope.launch {
-            try {
-                val user = NuphosApi.currentUser(token)
-                if (generation != expected) return@launch
-                tokenStore.write(token)
-                this@AuthSession.token = token
-                AiAccess.activate(token)
-                composerDrafts.onIdentity(user.id)
-                state = State.SignedIn(user)
-                loadAIConsent()
-            } catch (e: Exception) {
-                if (generation == expected) state = State.SignedOut(e.message)
-            }
-        }
+    private fun cancelLogin() {
+        loginAttempt?.close()
+        loginAttempt = null
+        loginJob?.cancel()
+        loginJob = null
+        customTabsOpen = false
     }
 
     fun refreshUser() {
@@ -292,7 +308,7 @@ class AuthSession(
     fun signOut(error: String? = null) {
         beginIdentity()
         customTabsOpen = false
-        receivedCallback = false
+        cancelLogin()
         clearToken()
         state = State.SignedOut(error)
     }

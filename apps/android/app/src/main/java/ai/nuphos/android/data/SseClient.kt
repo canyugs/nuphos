@@ -1,6 +1,7 @@
 package ai.nuphos.android.data
 
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
@@ -42,6 +43,7 @@ object SseClient {
         val seen = AtomicBoolean(false)
         val lastByte = AtomicLong(System.nanoTime())
         val closed = AtomicBoolean(false)
+        val backpressured = AtomicBoolean(false)
 
         fun touch() {
             seen.set(true)
@@ -57,7 +59,7 @@ object SseClient {
                     call.cancel()
                     return@launch
                 }
-                if (seen.get() && idleMs > idleTimeoutMs) {
+                if (seen.get() && !backpressured.get() && idleMs > idleTimeoutMs) {
                     close(Failure.IdleTimeout)
                     call.cancel()
                     return@launch
@@ -87,8 +89,13 @@ object SseClient {
                     }
                     try {
                         readEvents(res.body.source(), ::touch) { event ->
-                            val result = trySend(event)
-                            result.isSuccess
+                            backpressured.set(true)
+                            try {
+                                trySendBlocking(event).isSuccess
+                            } finally {
+                                touch()
+                                backpressured.set(false)
+                            }
                         }
                         closed.set(true)
                         close()
