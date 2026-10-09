@@ -81,7 +81,12 @@ class RuntimeSetupFixtureDeviceTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
     }
     private fun click(text: String) = compose.onNodeWithText(text).performScrollTo().performClick()
-    private fun select() { click("Use Fixture Agent"); waitText("Selected Fixture Agent") }
+    private fun select() {
+        compose.onNodeWithContentDescription("Use Fixture Agent").performScrollTo().performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithContentDescription("Selected Fixture Agent").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
     private fun posts(suffix: String) = requests.count { it.method == "POST" && it.url.encodedPath.endsWith(suffix) }
     @Test fun actualSheetCreatesOnceThenSelectsExactSavedRegistration() {
         render(); compose.onNodeWithText("Agent label (optional)").performScrollTo().performTextInput(" Fixture Agent ")
@@ -96,7 +101,7 @@ class RuntimeSetupFixtureDeviceTest {
         catalog = "[${runtime(active = false)}]"; click("Refresh Agents")
         waitText("The selected Agent is unavailable.", true)
         assertTrue(selection.reselectionRequired); assertNull(selection.binding)
-        compose.onNodeWithText("Selected Fixture Agent").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Selected Fixture Agent").assertIsNotEnabled()
         assertEquals(0, posts("/login"))
     }
     @Test fun editorCannotCreateOrSignInAndForbiddenKeepsAccount() {

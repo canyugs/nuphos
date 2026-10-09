@@ -3,12 +3,18 @@ package ai.nuphos.android.ui.agent
 import android.content.ActivityNotFoundException
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -45,22 +51,49 @@ fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
     ModalBottomSheet(onDismissRequest = { code = ""; onDismiss() }, properties = ModalBottomSheetProperties(securePolicy = androidx.compose.ui.window.SecureFlagPolicy.SecureOn)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Set up an Agent", style = MaterialTheme.typography.headlineSmall)
-            Text("Choose an Agent for new chats. Existing chats keep their saved runtime. Active registration does not confirm provider readiness.")
+            Text("Choose an Agent for new chats. Existing chats keep their current Agent.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             state.message?.let { Text(it) }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (selection.reselectionRequired) Text("The selected Agent is unavailable. Select a saved active Agent before starting a new chat.")
+            Text("Saved Agents", style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             selection.catalog.forEach { runtime ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) { Text(runtime.label); Text("${runtime.provider} · ${runtime.kind} · ${runtime.status}") }
-                    TextButton(onClick = { code = ""; store.select(runtime.id) }, enabled = !state.busy && state.catalogLoaded && runtime.selectable) {
-                        Text(if (selection.selectedId == runtime.id) "Selected ${runtime.label}" else "Use ${runtime.label}")
+                val selected = selection.selectedId == runtime.id
+                val enabled = !state.busy && state.catalogLoaded && runtime.selectable
+                val providerName = when (runtime.provider) {
+                    "codex" -> "Codex"
+                    "claude-code" -> "Claude Code"
+                    else -> runtime.provider
+                }
+                val description = if (selected) "Selected ${runtime.label}" else "Use ${runtime.label}"
+                Surface(
+                    onClick = { code = ""; store.select(runtime.id) },
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = description },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(runtime.label, style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text("$providerName · ${runtime.kind.replace('-', ' ').replaceFirstChar { it.uppercase() }} · ${runtime.status.replaceFirstChar { it.uppercase() }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        RadioButton(selected = selected, onClick = null, enabled = enabled)
                     }
                 }
             }
             if (state.catalogLoaded && selection.catalog.isEmpty()) Text("No saved Agents.")
             OutlinedButton(onClick = { store.refresh() }, enabled = !state.busy) { Text("Refresh Agents") }
             if (store.canAdminister) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("Managed Agent", style = MaterialTheme.typography.titleMedium)
                 Text("Creation can allocate resources. Provider sign-in is a separate step.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
