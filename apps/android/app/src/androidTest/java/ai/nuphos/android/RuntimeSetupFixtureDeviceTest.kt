@@ -41,7 +41,7 @@ class RuntimeSetupFixtureDeviceTest {
     private lateinit var store: RuntimeSetupStore
     private val owner = RuntimeSelections()
     private val selection = owner.bind("synthetic-account", "507f1f77bcf86cd799439011")
-    private fun runtime(runtimeId: String = id, active: Boolean = true) = """{"id":"$runtimeId","provider":"$provider","label":"Fixture Agent","status":"${if (active) "active" else "disabled"}","kind":"managed"}"""
+    private fun runtime(runtimeId: String = id, active: Boolean = true, label: String = "Fixture Agent") = """{"id":"$runtimeId","provider":"$provider","label":"$label","status":"${if (active) "active" else "disabled"}","kind":"managed"}"""
     private fun login() = """{"attemptId":"$uuid","state":"$status","expiresAt":"$expiry"${if (status == "awaiting_authorization") if (provider == "codex") ",\"verificationUri\":\"https://example.test/device\",\"userCode\":\"SYNTHETIC-CODE\"" else ",\"authorizationUrl\":\"https://example.test/claude\",\"codeSubmitted\":$codeSubmitted" else ""}}"""
     private val api = AgentRuntimeApi("synthetic-no-credentials", "507f1f77bcf86cd799439011", OkHttpClient.Builder().addInterceptor { chain ->
         val request = chain.request(); requests += request
@@ -104,6 +104,20 @@ class RuntimeSetupFixtureDeviceTest {
         compose.onNodeWithContentDescription("Selected Fixture Agent").assertIsNotEnabled()
         assertEquals(0, posts("/login"))
     }
+    @Test fun longAgentNameStaysInsideSelectableCard() {
+        val name = "Long Agent name for a shared development workspace ".repeat(4)
+        catalog = "[${runtime(label = name)}]"
+        render()
+        val card = compose.onNodeWithContentDescription("Use $name")
+        card.performScrollTo().assertIsDisplayed()
+        val cardBounds = card.fetchSemanticsNode().boundsInRoot
+        val nameBounds = compose.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("Name must stay inside the card", nameBounds.left >= cardBounds.left && nameBounds.right <= cardBounds.right)
+        assertTrue("Name must leave room for the selection indicator", nameBounds.right < cardBounds.right)
+        card.performClick()
+        compose.waitUntil(5_000) { selection.selectedId == id }
+    }
+
     @Test fun editorCannotCreateOrSignInAndForbiddenKeepsAccount() {
         administrator = false; catalog = "[${runtime()}]"; render(); select()
         compose.onAllNodesWithText("Create Agent").assertCountEquals(0)
