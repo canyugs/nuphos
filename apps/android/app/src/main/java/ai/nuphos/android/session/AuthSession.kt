@@ -20,7 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -247,7 +247,9 @@ class AuthSession(
                 customTabsOpen = true
                 tabs.launchUrl(activity, Uri.parse(url))
                 val code = withContext(Dispatchers.IO) { attempt.awaitDelivery() }
-                withTimeout(5 * 60 * 1000L) { resumed.await() }
+                if (withTimeoutOrNull(5 * 60 * 1000L) { resumed.await(); true } != true) {
+                    throw java.net.SocketTimeoutException("Sign-in expired. Please try again.")
+                }
                 val received = withContext(Dispatchers.IO) { attempt.redeem(code) }
                 val user = NuphosApi.currentUser(received)
                 ensureActive()
