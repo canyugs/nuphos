@@ -86,6 +86,37 @@ class NativeLoginTest {
         }
     }
 
+    @Test fun deliveryWaitsForForegroundBeforeRedemptionAndCloseRejectsIt() {
+        val fixture = Fixture()
+        NativeLogin(fixture.client).use { login ->
+            login.register()
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                val delivery = executor.submit<String> { login.awaitDelivery() }
+                assertTrue(fixture.hit(fixture.delivery()).startsWith("HTTP/1.1 200"))
+                val code = delivery.get(3, TimeUnit.SECONDS)
+                assertTrue(login.receivedCallback)
+                assertNull(fixture.redeemed)
+                assertEquals(1, fixture.requests.size)
+                assertEquals("synthetic-session-token", login.redeem(code))
+                assertEquals(2, fixture.requests.size)
+            } finally { executor.shutdownNow() }
+        }
+        val canceled = Fixture()
+        NativeLogin(canceled.client).use { login ->
+            login.register()
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                val delivery = executor.submit<String> { login.awaitDelivery() }
+                canceled.hit(canceled.delivery())
+                val code = delivery.get(3, TimeUnit.SECONDS)
+                login.close()
+                try { login.redeem(code); fail("Canceled delivery was redeemed") } catch (_: IOException) { }
+                assertNull(canceled.redeemed)
+            } finally { executor.shutdownNow() }
+        }
+    }
+
     @Test fun wrongStateDuplicateAndExternalTokensDoNotConsumeAttempt() {
         val fixture = Fixture()
         NativeLogin(fixture.client).use { login ->

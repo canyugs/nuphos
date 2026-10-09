@@ -51,9 +51,12 @@ class NativeLogin internal constructor(
     }
 
     /** Called on an IO thread. Close interrupts both the listener and HTTPS calls. */
-    fun awaitToken(): String {
+    fun awaitToken(): String = redeem(awaitDelivery())
+
+    /** Receive the local callback without using the network while the browser is foreground. */
+    internal fun awaitDelivery(): String {
         checkOpen()
-        val registered = requireNotNull(handle)
+        requireNotNull(handle)
         while (true) {
             checkOpen()
             val remaining = (deadline - System.nanoTime()) / 1_000_000
@@ -78,14 +81,7 @@ class NativeLogin internal constructor(
                 respond(socket, 200, "<p>Return to Nuphos to finish sign-in.</p><a href=\"nuphos://google-callback\">Return to Nuphos</a>")
                 server.close()
                 if (result is NuphosWeb.CallbackResult.Failure) throw IOException(result.message)
-                val redeemed = post("session/redeem", buildJsonObject {
-                    put("handle", registered)
-                    put("codeVerifier", requireNotNull(verifier))
-                    put("code", (result as NuphosWeb.CallbackResult.Code).code)
-                })
-                checkOpen()
-                return redeemed["token"]?.jsonPrimitive?.takeIf { it.isString }?.content
-                    ?.takeIf { it.isNotBlank() } ?: throw IOException("Nuphos could not confirm sign-in. Please try again.")
+                return (result as NuphosWeb.CallbackResult.Code).code
             } catch (_: SocketTimeoutException) {
                 // A partial local request must not consume the real attempt.
                 if (claimed.get()) throw SocketTimeoutException("Sign-in expired. Please try again.")
@@ -94,6 +90,20 @@ class NativeLogin internal constructor(
                 accepted = null
             }
         }
+    }
+
+    /** The host must resume before exchanging a delivered code over HTTPS. */
+    internal fun redeem(code: String): String {
+        checkOpen()
+        check(receivedCallback)
+        val redeemed = post("session/redeem", buildJsonObject {
+            put("handle", requireNotNull(handle))
+            put("codeVerifier", requireNotNull(verifier))
+            put("code", code)
+        })
+        checkOpen()
+        return redeemed["token"]?.jsonPrimitive?.takeIf { it.isString }?.content
+            ?.takeIf { it.isNotBlank() } ?: throw IOException("Nuphos could not confirm sign-in. Please try again.")
     }
 
     private fun post(path: String, body: JsonObject): JsonObject {

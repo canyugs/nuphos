@@ -19,6 +19,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -191,6 +193,7 @@ class AuthSession(
     private var customTabsOpen = false
     private var loginAttempt: NativeLogin? = null
     private var loginJob: Job? = null
+    private var loginResumed: CompletableDeferred<Unit>? = null
 
     fun restore() {
         if (state is State.SigningIn || (state is State.SignedIn && token != null)) return
@@ -226,6 +229,8 @@ class AuthSession(
         val expected = beginIdentity()
         state = State.SigningIn
         customTabsOpen = false
+        val resumed = CompletableDeferred<Unit>()
+        loginResumed = resumed
         loginJob = scope.launch {
             var attempt: NativeLogin? = null
             try {
@@ -241,7 +246,9 @@ class AuthSession(
                 tabs.intent.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)
                 customTabsOpen = true
                 tabs.launchUrl(activity, Uri.parse(url))
-                val received = withContext(Dispatchers.IO) { attempt.awaitToken() }
+                val code = withContext(Dispatchers.IO) { attempt.awaitDelivery() }
+                withTimeout(5 * 60 * 1000L) { resumed.await() }
+                val received = withContext(Dispatchers.IO) { attempt.redeem(code) }
                 val user = NuphosApi.currentUser(received)
                 ensureActive()
                 if (generation != expected || state !is State.SigningIn || loginAttempt !== attempt) return@launch
@@ -262,6 +269,7 @@ class AuthSession(
                 if (loginAttempt === attempt) {
                     loginAttempt = null
                     loginJob = null
+                    loginResumed = null
                     customTabsOpen = false
                 }
             }
@@ -274,6 +282,7 @@ class AuthSession(
     /** Called from [Activity.onResume] after Custom Tabs returns. */
     fun onHostResumed() {
         if (state is State.SignedIn && !consentBusy) loadAIConsent()
+        if (state is State.SigningIn && loginAttempt?.receivedCallback == true) loginResumed?.complete(Unit)
         if (state is State.SigningIn && customTabsOpen && loginAttempt?.receivedCallback != true) {
             cancelLogin()
             beginIdentity()
@@ -286,6 +295,7 @@ class AuthSession(
         loginAttempt = null
         loginJob?.cancel()
         loginJob = null
+        loginResumed = null
         customTabsOpen = false
     }
 
