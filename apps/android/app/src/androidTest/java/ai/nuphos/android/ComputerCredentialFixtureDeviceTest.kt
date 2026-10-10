@@ -9,6 +9,7 @@ import ai.nuphos.android.data.JsonValue
 import ai.nuphos.android.model.CredentialCatalog
 import ai.nuphos.android.model.CredentialSelection
 import ai.nuphos.android.session.AgentStore
+import ai.nuphos.android.session.ChatSession
 import ai.nuphos.android.ui.LocalAgentStore
 import ai.nuphos.android.ui.chat.CredentialPickerSheet
 import ai.nuphos.android.ui.theme.NuphosTheme
@@ -30,7 +31,8 @@ class ComputerCredentialFixtureDeviceTest {
         }""")!!)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = AgentStore("synthetic-no-credentials", context)
-        val selection = mutableStateOf(CredentialSelection(JsonValue.parse("""{"deviceIds":["mac"],"awsRoleIds":["aws"]}""")!!))
+        val session = ChatSession("synthetic-no-credentials", "synthetic-team", "synthetic-chat", aiAllowed = { false })
+        session.credentialAccess = CredentialSelection(JsonValue.parse("""{"deviceIds":["mac"],"awsRoleIds":["aws"]}""")!!)
         // No workspace is selected, so the sheet cannot load a live catalog.
         @Suppress("UNCHECKED_CAST")
         val cached = AgentStore::class.java.getDeclaredField("credentialCatalog\$delegate").also { it.isAccessible = true }.get(store) as MutableState<CredentialCatalog?>
@@ -39,7 +41,7 @@ class ComputerCredentialFixtureDeviceTest {
             compose.setContent {
                 NuphosTheme {
                     CompositionLocalProvider(LocalAgentStore provides store) {
-                        CredentialPickerSheet(selection.value, { selection.value = it }, {})
+                        CredentialPickerSheet(session.credentialAccess!!, { session.credentialAccess = it }, {})
                     }
                 }
             }
@@ -49,19 +51,19 @@ class ComputerCredentialFixtureDeviceTest {
             compose.onNodeWithText("Office Mac").assertIsOn()
             compose.onNodeWithText("Home PC").assertIsOff().performClick().assertIsOn()
             compose.runOnIdle {
-                assertEquals(setOf("mac", "pc"), selection.value.ids["deviceIds"])
-                assertEquals(setOf("aws"), selection.value.ids["awsRoleIds"])
+                assertEquals(setOf("mac", "pc"), session.credentialAccess!!.ids["deviceIds"])
+                assertEquals(setOf("aws"), session.credentialAccess!!.ids["awsRoleIds"])
             }
             compose.onNodeWithText("Office Mac").performClick().assertIsOff()
             compose.onNodeWithText("Home PC").assertIsOn()
             compose.runOnIdle {
-                assertEquals(listOf("pc"), selection.value.json["deviceIds"]!!.arrayValue!!.map { it.stringValue })
-                assertEquals(setOf("aws"), selection.value.ids["awsRoleIds"])
+                assertEquals(listOf("pc"), session.credentialAccess!!.json["deviceIds"]!!.arrayValue!!.map { it.stringValue })
+                assertEquals(setOf("aws"), session.credentialAccess!!.ids["awsRoleIds"])
             }
             compose.onNodeWithText("Clear").performClick()
             compose.onNodeWithText("Office Mac").assertIsOff()
             compose.onNodeWithText("Home PC").assertIsOff()
-            compose.runOnIdle { assertTrue(selection.value.json["deviceIds"]!!.arrayValue!!.isEmpty()) }
+            compose.runOnIdle { assertTrue(session.credentialAccess!!.json["deviceIds"]!!.arrayValue!!.isEmpty()) }
         } finally {
             compose.runOnIdle { store.disposeForConsent() }
         }

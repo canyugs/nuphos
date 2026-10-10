@@ -94,7 +94,7 @@ class ChatSession(
     var followsBottom by mutableStateOf(true)
     var permissionMode by mutableStateOf(PermissionMode.Auto)
         private set
-    var credentialAccess: CredentialSelection? = null
+    var credentialAccess by mutableStateOf<CredentialSelection?>(null)
     var sendAfterLoad: String? = null
 
     var isArchived by mutableStateOf(false)
