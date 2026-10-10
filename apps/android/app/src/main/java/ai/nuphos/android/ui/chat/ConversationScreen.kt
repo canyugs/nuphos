@@ -288,6 +288,7 @@ fun ConversationScreen(
                         }
                     }
                 }
+                session.runtimeDeviceLabel?.let { Text("Agent: $it", modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium) }
                 session.runtimeLabel?.let { Text(it, modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall) }
                 if (session.cancelRequested) Text("Cancellation requested", modifier = Modifier.padding(horizontal = 16.dp))
                 if (session.isNative && session.canCancel) TextButton(onClick = session::stop) { Text("Cancel run") }

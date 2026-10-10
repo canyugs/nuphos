@@ -26,7 +26,7 @@ class RuntimeSelections {
         var loginAttemptId: String? = null
         val selected get() = catalog.firstOrNull { it.id == selectedId && it.selectable }
         val reselectionRequired get() = selectedId != null && selected == null
-        val binding get() = selected?.let { RuntimeBinding(it.id, it.provider) }
+        val binding get() = selected?.let { RuntimeBinding(it.id, it.provider, it.label) }
         fun saveCatalog(saved: List<AgentRuntime>) { if (valid) catalog = saved }
         fun select(id: String): Boolean {
             if (!valid || catalog.none { it.id == id && it.selectable }) return false

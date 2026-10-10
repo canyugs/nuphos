@@ -47,6 +47,8 @@ class ChatSession(
     val creationRuntimeBinding: ai.nuphos.android.data.RuntimeBinding? = null,
     private val steerRuntime: suspend (String, String, String, String) -> String = RuntimeApi::steer,
 ) {
+    var runtimeDeviceLabel by mutableStateOf(creationRuntimeBinding?.displayLabel?.takeIf { it.isNotBlank() })
+        private set
     private var serverMetadataObserved = false
     val outgoingCreationBinding get() = creationRuntimeBinding.takeUnless { serverMetadataObserved }
     var title by mutableStateOf(title)
@@ -637,6 +639,7 @@ class ChatSession(
         canRespondToRun = detail.canRespondToRun ?: false
         serverMetadataObserved = true
         agentRuntime = detail.agentRuntime
+        runtimeDeviceLabel = detail.runtimeLabel?.takeIf { it.isNotBlank() }
         detail.runtimeState?.let { receiveRuntime(it, observedAt) }
         detail.title?.takeIf { it.isNotEmpty() }?.let { title = it }
         if (isNative && !steeringUnconfirmed && !steeringRetryRequired && queued.isNotEmpty()) submitSteering()

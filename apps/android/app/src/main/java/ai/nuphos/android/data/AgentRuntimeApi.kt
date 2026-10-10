@@ -15,7 +15,7 @@ data class AgentRuntime(val id: String, val provider: String, val label: String,
         status == "active" && kind in setOf("managed", "external", "development", "local") && !deleting
 }
 
-data class RuntimeBinding(val runtimeId: String, val agentRuntime: String)
+data class RuntimeBinding(val runtimeId: String, val agentRuntime: String, val displayLabel: String? = null)
 
 /** Authorization fields are memory-only and are removed outside the awaiting state. */
 data class RuntimeLogin(val attemptId: String, val state: String, val expiresAt: Long,

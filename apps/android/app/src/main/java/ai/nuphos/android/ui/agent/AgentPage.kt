@@ -107,7 +107,7 @@ fun AgentPage(
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(horizontal = 16.dp)) {
-            Button(onClick = { setupVisible = true }, enabled = setup != null && auth.aiAllowed) { Text("Choose or set up an Agent") }
+            AgentSelectionButton(selection, enabled = setup != null && auth.aiAllowed, onClick = { setupVisible = true })
         }
         if (selection?.reselectionRequired == true) Text("Select an available Agent before starting a new chat.", Modifier.padding(horizontal = 16.dp))
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

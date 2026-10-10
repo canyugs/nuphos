@@ -15,6 +15,9 @@ import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -87,7 +90,7 @@ fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
                         Surface(
                             onClick = { code = ""; store.select(runtime.id) },
                             enabled = enabled,
-                            modifier = Modifier.fillMaxWidth().semantics { contentDescription = description },
+                            modifier = Modifier.fillMaxWidth().semantics { contentDescription = description; this.selected = selected; role = Role.RadioButton },
                             shape = RoundedCornerShape(16.dp),
                             color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                             border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
@@ -100,7 +103,7 @@ fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(runtime.label, style = MaterialTheme.typography.titleMedium,
                                         maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                    Text("$providerName · ${runtime.status.replaceFirstChar { it.uppercase() }}",
+                                    Text("$providerName · ${if (selected) "Selected" else runtime.status.replaceFirstChar { it.uppercase() }}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }

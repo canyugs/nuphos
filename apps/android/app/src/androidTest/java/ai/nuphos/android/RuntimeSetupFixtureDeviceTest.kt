@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import ai.nuphos.android.data.*
 import ai.nuphos.android.session.*
 import ai.nuphos.android.ui.agent.RuntimeSetupSheet
+import ai.nuphos.android.ui.agent.AgentSelectionButton
 import ai.nuphos.android.ui.theme.NuphosTheme
 import kotlinx.coroutines.*
 import okhttp3.*
@@ -121,6 +122,30 @@ class RuntimeSetupFixtureDeviceTest {
         compose.onNodeWithContentDescription("Selected Fixture Agent").assertIsNotEnabled()
         assertEquals(0, posts("/login"))
     }
+    @Test fun homeSelectionLabelUpdatesAndDoesNotShowUnavailableAgent() {
+        selection.saveCatalog(listOf(AgentRuntime("computer", "codex", "My laptop", "active", "local")))
+        compose.setContent { NuphosTheme { AgentSelectionButton(selection, true, {}) } }
+        compose.onNodeWithText("Choose an Agent").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(selection.select("computer")) }
+        compose.onNodeWithText("My laptop").assertIsDisplayed()
+        compose.onNodeWithText("Codex · Change Agent").assertIsDisplayed()
+        compose.runOnIdle { selection.saveCatalog(emptyList()) }
+        compose.onNodeWithText("Choose an available Agent").assertIsDisplayed()
+        compose.onNodeWithText("My laptop").assertDoesNotExist()
+    }
+
+    @Test fun localAgentCanBeSelectedByTouchWithoutProviderWrites() {
+        catalog = "[${runtime(runtimeId = "computer", label = "My laptop", kind = "local")},${runtime()}]"
+        render()
+        val card = compose.onNodeWithContentDescription("Use My laptop")
+        card.performScrollTo().assertIsDisplayed().assertIsNotSelected()
+        card.performTouchInput { click() }
+        compose.waitUntil(5_000) { selection.selectedId == "computer" }
+        compose.onNodeWithContentDescription("Selected My laptop").assertIsSelected()
+        assertEquals("computer", selection.binding?.runtimeId)
+        assertTrue(requests.none { it.method != "GET" })
+    }
+
     @Test fun longAgentNameStaysInsideSelectableCard() {
         val name = "Long Agent name for a shared development workspace ".repeat(4)
         catalog = "[${runtime(label = name)}]"

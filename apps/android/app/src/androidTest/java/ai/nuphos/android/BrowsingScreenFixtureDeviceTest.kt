@@ -101,6 +101,7 @@ class BrowsingScreenFixtureDeviceTest {
     }
 
     private fun detail() = AgentConversationDetail(
+        runtimeId = "fixture-laptop", runtimeLabel = "Fixture laptop",
         title = "Saved fixture run", readOnly = false, isOwner = true,
         canCancelRun = true, canRespondToRun = true,
         agentRuntime = if (native) "openab" else null,
@@ -160,6 +161,7 @@ class BrowsingScreenFixtureDeviceTest {
     @Test fun fullTitleDialogDoesNotEnableActionsOrFetchAgain() {
         render()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Saved fixture answer").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Agent: Fixture laptop").assertIsDisplayed()
         compose.onNodeWithContentDescription("Show full chat title").performClick()
         compose.onNodeWithText("Chat title").assertIsDisplayed()
         compose.onAllNodesWithText("Saved fixture run").onLast().assertIsDisplayed()
