@@ -38,9 +38,13 @@ import org.junit.runner.RunWith
 /** Synthetic browsing data; page transports never reach a server. */
 @RunWith(AndroidJUnit4::class)
 class BrowsingFixtureDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
     private val originals = mutableMapOf<String, OkHttpClient>()
+    private lateinit var app: NuphosApplication
+    private var savedToken: String? = null
     @Before fun blockBackgroundNetwork() {
+        app = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as NuphosApplication
+        savedToken = app.tokenStore.read()
         val fixture = OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200)
                 .message("fixture").body("{}".toResponseBody(Http.jsonMedia)).build()
@@ -52,6 +56,7 @@ class BrowsingFixtureDeviceTest {
         }
     }
     @After fun restoreBackgroundNetwork() {
+        assertEquals("Browsing fixture changed installed token (values withheld)", savedToken == app.tokenStore.read(), true)
         for ((name, client) in originals) Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client)
     }
     private val team = "0123456789abcdef01234567"

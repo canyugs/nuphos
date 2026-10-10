@@ -40,7 +40,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 /** Real transcript screen with synthetic data and no server connection. */
 @RunWith(AndroidJUnit4::class)
 class BrowsingScreenFixtureDeviceTest {
-    private val compose = createAndroidComposeRule<MainActivity>()
+    private val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
     private val requests = CopyOnWriteArrayList<Request>()
     private val originals = mutableMapOf<String, OkHttpClient>()
     private val team = "screen-fixture-team"
@@ -55,11 +55,13 @@ class BrowsingScreenFixtureDeviceTest {
         private lateinit var installedAuth: AuthSession
         private lateinit var savedState: AuthSession.State
         private var savedToken: String? = null
+        private var savedPersistedToken: String? = null
         override fun before() {
             val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as NuphosApplication
             installedAuth = app.authSession
             savedState = installedAuth.state
             savedToken = installedAuth.token
+            savedPersistedToken = app.tokenStore.read()
             InstrumentationRegistry.getInstrumentation().runOnMainSync { savedAccess = accessState().value }
             val client = OkHttpClient.Builder().addInterceptor { chain ->
                 val request = chain.request()
@@ -82,6 +84,8 @@ class BrowsingScreenFixtureDeviceTest {
                 state(installedAuth, "state", savedState)
                 AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(installedAuth, savedToken)
             }
+            val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as NuphosApplication
+            assertTrue("Transcript fixture changed installed token (values withheld)", savedPersistedToken == app.tokenStore.read())
             originals.forEach { (name, client) ->
                 Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client)
             }
