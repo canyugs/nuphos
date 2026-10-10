@@ -84,6 +84,11 @@ class LocalNotificationFixtureDeviceTest {
             account = null
             local.onIdentity(null, true)
             assertNull(local.pending.value.value)
+            // The system notification service applies cancellation asynchronously.
+            val clearDeadline = android.os.SystemClock.elapsedRealtime() + 3_000
+            while (manager.activeNotifications.any { it.tag == LocalNotifications.TAG } && android.os.SystemClock.elapsedRealtime() < clearDeadline) {
+                android.os.SystemClock.sleep(50)
+            }
             assertTrue("Signout left a local notification visible", manager.activeNotifications.none { it.tag == LocalNotifications.TAG })
             tap.cancel()
         } finally {
