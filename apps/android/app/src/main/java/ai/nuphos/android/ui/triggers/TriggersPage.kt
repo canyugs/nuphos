@@ -74,7 +74,7 @@ fun TriggersPage(
                         Card(Modifier.fillMaxWidth().clickable { selectedTeamId?.let { onOpenRun(run.sessionId, it) } }) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(run.displayTitle, style = MaterialTheme.typography.titleMedium)
-                                Text("${run.messageCount} messages · ${run.lastActiveAt}", style = MaterialTheme.typography.bodySmall)
+                                Text("${run.messageCount} messages · ${ai.nuphos.android.model.ChatTime.label(run.lastActiveAt)}", style = MaterialTheme.typography.bodySmall)
                                 if (run.activitySource?.linkedSlackThread == true) Text("Slack-linked run", style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -140,14 +140,21 @@ private fun TriggerInformation(trigger: TriggerRow) {
         Text("State: ${if (trigger.enabled) "Enabled" else "Disabled"}")
         trigger.cronExpression?.let { Text("Schedule (UTC): $it") }
         trigger.nextRuns.forEach { Text("Next run (UTC): $it") }
-        Text("Principal: ${trigger.executionPrincipalId ?: "Not available"}")
         Text("Authorization: ${trigger.authorizationStatus ?: "Not available"}")
         Text("Provider cleanup: ${trigger.providerCleanupStatus ?: "None reported"}")
-        trigger.watchGroupId?.let { Text("Watch Group: $it") }
         trigger.providerHint?.let { Text("Provider: $it") }
-        trigger.createdAt?.let { Text("Created: $it") }
-        trigger.updatedAt?.let { Text("Updated: $it") }
-        trigger.expiresAt?.let { Text("Expires: $it") }
-        trigger.lastExecutedAt?.let { Text("Last executed: $it") }
+        trigger.createdAt?.let { Text("Created: ${friendlyTimestamp(it)}") }
+        trigger.updatedAt?.let { Text("Updated: ${friendlyTimestamp(it)}") }
+        trigger.expiresAt?.let { Text("Expires: ${friendlyTimestamp(it)}") }
+        trigger.lastExecutedAt?.let { Text("Last executed: ${friendlyTimestamp(it)}") }
+        ai.nuphos.android.ui.components.TechnicalDetails(trigger.id) {
+            Text("Principal: ${trigger.executionPrincipalId ?: "Not available"}")
+            trigger.watchGroupId?.let { Text("Watch Group: $it") }
+        }
     }
 }
+
+private fun friendlyTimestamp(value: String): String = runCatching {
+    java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT)
+        .withZone(java.time.ZoneId.systemDefault()).format(java.time.Instant.parse(value))
+}.getOrDefault(value)

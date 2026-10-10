@@ -153,6 +153,18 @@ class BrowsingScreenFixtureDeviceTest {
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
     }
 
+    @Test fun fullTitleDialogDoesNotEnableActionsOrFetchAgain() {
+        render()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Saved fixture answer").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Show full chat title").performClick()
+        compose.onNodeWithText("Chat title").assertIsDisplayed()
+        compose.onAllNodesWithText("Saved fixture run").onLast().assertIsDisplayed()
+        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithText("Chat title").assertDoesNotExist()
+        assertNoActions()
+        assertEquals(1, requests.count { it.url.encodedPath.endsWith("/screen-fixture") })
+    }
+
     @Test fun legacyRunUsesTheReadOnlyScreen() = exercise(false)
     @Test fun nativeRunUsesTheReadOnlyScreen() = exercise(true)
     private fun exercise(isNative: Boolean) {

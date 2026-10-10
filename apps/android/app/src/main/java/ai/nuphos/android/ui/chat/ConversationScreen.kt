@@ -66,6 +66,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
@@ -184,12 +186,23 @@ fun ConversationScreen(
         }
     }
 
+    var showTitle by remember(session.title) { mutableStateOf(false) }
+    if (showTitle) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { showTitle = false },
+        title = { Text("Chat title") },
+        text = { androidx.compose.foundation.text.selection.SelectionContainer { Text(session.title) } },
+        confirmButton = { TextButton(onClick = { showTitle = false }) { Text("Done") } },
+    )
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
-                title = { Text(session.title, maxLines = 1) },
+                title = {
+                    Text(session.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.clickable { showTitle = true }.semantics { contentDescription = "Show full chat title" })
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },

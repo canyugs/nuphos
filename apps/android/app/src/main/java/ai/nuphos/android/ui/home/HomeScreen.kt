@@ -250,7 +250,7 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    TextButton(onClick = { showWorkspaces = true }) { Text(store.selectedTeam?.name ?: "Choose workspace") }
+                    TextButton(onClick = { showWorkspaces = true }) { Text(store.selectedTeam?.name ?: "Choose workspace", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
                     DropdownMenu(showWorkspaces, onDismissRequest = { showWorkspaces = false }) {
                         store.teams.forEach { team ->
                             DropdownMenuItem(text = { Text(team.name) }, onClick = {
@@ -291,7 +291,7 @@ fun HomeScreen(
             Text(
                 current.title,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             PageSwitcher(
@@ -300,7 +300,7 @@ fun HomeScreen(
                     page = it.route
                     searching = false
                 },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             if (store.selectedTeam == null && store.teamsPhase == AgentStore.Phase.Loaded) {
                 Column(Modifier.fillMaxWidth().weight(1f).padding(20.dp), verticalArrangement = Arrangement.Center,

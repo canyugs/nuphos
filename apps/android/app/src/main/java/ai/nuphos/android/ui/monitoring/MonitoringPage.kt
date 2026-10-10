@@ -29,6 +29,7 @@ fun MonitoringPage(store: MonitoringStore, selectedTeamId: String?, onOpenConnec
     var status by rememberSaveable(selectedTeamId) { mutableStateOf("") }
     var detailId by rememberSaveable(selectedTeamId) { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    var showErrors by remember(selectedTeamId) { mutableStateOf(false) }
     LaunchedEffect(selectedTeamId) {
         if (store.teamId == selectedTeamId && store.phase != BrowsingPhase.Idle) store.refresh()
         else store.select(selectedTeamId)
@@ -68,7 +69,12 @@ fun MonitoringPage(store: MonitoringStore, selectedTeamId: String?, onOpenConnec
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text("Some providers could not be loaded", style = MaterialTheme.typography.titleSmall)
-                        store.overview.providerErrors.forEach { Text("${it.provider}: ${it.message}") }
+                        TextButton(onClick = { showErrors = !showErrors }) {
+                            Text(if (showErrors) "Hide provider errors" else "Show provider errors")
+                        }
+                        if (showErrors) store.overview.providerErrors.forEach {
+                            Text("${it.provider} · ${it.integrationLabel}: ${it.message}", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
@@ -83,7 +89,6 @@ fun MonitoringPage(store: MonitoringStore, selectedTeamId: String?, onOpenConnec
                         Text(row.name, style = MaterialTheme.typography.titleMedium)
                         Text(row.statusLabel, style = MaterialTheme.typography.labelLarge)
                         Text("${row.provider} · ${row.integrationLabel}", style = MaterialTheme.typography.bodySmall)
-                        row.target?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
@@ -98,16 +103,21 @@ private fun MonitoringInformation(row: MonitoringRow, onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     val url = providerHttpsUrl(row.providerUrl)
     var linkError by remember(row.id) { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(row.name, style = MaterialTheme.typography.headlineSmall)
             Text("Status: ${row.statusLabel}")
             Text("Provider: ${row.provider}")
             Text("Connector: ${row.integrationLabel}")
-            Text("Kind: ${row.kind}")
-            Text("Resource: ${row.providerResourceId}")
-            row.target?.let { Text("Target: $it") }
-            row.lastIncidentAt?.let { Text("Last incident: $it") }
+            row.lastIncidentAt?.let {
+                val label = runCatching { ai.nuphos.android.model.ChatTime.label(java.time.Instant.parse(it)) }.getOrDefault(it)
+                Text("Last incident: $label")
+            }
+            ai.nuphos.android.ui.components.TechnicalDetails(row.id) {
+                Text("Kind: ${row.kind}")
+                Text("Resource: ${row.providerResourceId}")
+                row.target?.let { Text("Target: $it") }
+            }
             if (url != null) TextButton(onClick = { linkError = runCatching { uriHandler.openUri(url) }.isFailure }) { Text("Open provider") }
             if (linkError) Text("Could not open the provider link.")
             TextButton(onClick = onDismiss) { Text("Close") }

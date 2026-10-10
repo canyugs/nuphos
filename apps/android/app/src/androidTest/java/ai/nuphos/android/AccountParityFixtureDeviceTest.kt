@@ -70,7 +70,7 @@ class AccountParityFixtureDeviceTest {
                 for (name in listOf("state", "generation", "consentVersion", "consentBusy", "consentError", "profileError")) {
                     authSnapshot["$name\$delegate"] = authState(name).value
                 }
-                for (name in listOf("token", "consentRequest", "customTabsOpen", "receivedCallback")) {
+                for (name in listOf("token", "consentRequest", "customTabsOpen")) {
                     val field = AuthSession::class.java.getDeclaredField(name).also { it.isAccessible = true }
                     authSnapshot[name] = field.get(app.authSession)
                 }

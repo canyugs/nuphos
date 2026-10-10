@@ -28,7 +28,7 @@ fun EditProfileSheet(user: NuphosUser, onDismiss: () -> Unit) {
             Text("Edit profile", style = MaterialTheme.typography.headlineSmall)
             OutlinedTextField(name, { name = it; error = null }, label = { Text("Name") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(username, { username = it; error = null }, label = { Text("Username") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(avatar, { avatar = it; error = null }, label = { Text("Google profile image URL (optional)") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(avatar, { avatar = it; error = null }, label = { Text("Profile image URL (optional)") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
                 error = profileValidationError(name, username, avatar)

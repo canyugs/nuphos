@@ -245,7 +245,7 @@ private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, st
                 size = 40.dp,
             )
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(conversation.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(conversation.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (status != null) Text(status, style = MaterialTheme.typography.labelSmall)
                 else if (HistoryStatus.unread(conversation)) Text("Unread", style = MaterialTheme.typography.labelSmall)
                 Text(meta(conversation), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)

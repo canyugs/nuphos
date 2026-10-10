@@ -62,7 +62,9 @@ fun ConnectorsPage() {
                         Text(ConnectorCatalog.named(row.provider)?.title ?: row.provider, style = MaterialTheme.typography.labelMedium)
                         Text(row.label, style = MaterialTheme.typography.titleMedium)
                         row.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        Text("ID: ${row.bindingId}", style = MaterialTheme.typography.bodySmall)
+                        ai.nuphos.android.ui.components.TechnicalDetails(row.key) {
+                            Text("ID: ${row.bindingId}", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }

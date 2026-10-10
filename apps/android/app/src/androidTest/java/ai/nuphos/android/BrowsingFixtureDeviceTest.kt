@@ -74,6 +74,24 @@ class BrowsingFixtureDeviceTest {
         compose.onNodeWithText("Fixture firing alert").assertIsDisplayed()
     }
 
+    @Test fun monitoringErrorsCollapseAndTechnicalDetailsStayAvailable() {
+        val target = "sum by (region) (a_very_long_metric_name_that_must_remain_readable)"
+        val store = MonitoringStore(BrowsingTransport { _, _ -> json("""{"rows":[{"provider":"grafana","integrationId":"binding","integrationLabel":"Grafana fixture","providerResourceId":"alert","kind":"alert","name":"Fixture check","status":"firing","target":"$target"}],"providerErrors":[{"provider":"gcp","integrationId":"gcp-one","integrationLabel":"First project","message":"Provider unavailable"},{"provider":"gcp","integrationId":"gcp-two","integrationLabel":"Second project","message":"Provider unavailable"}]}""") })
+        runBlocking { store.select(team) }
+        compose.runOnIdle { compose.activity.setContent { NuphosTheme { MonitoringPage(store, team, {}) } } }
+        compose.onNodeWithText("$target", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("gcp · First project: Could not load this provider. Refresh to try again.").assertDoesNotExist()
+        compose.onNodeWithText("Show provider errors").performClick()
+        compose.onNodeWithText("gcp · First project: Could not load this provider. Refresh to try again.").assertIsDisplayed()
+        compose.onNodeWithText("gcp · Second project: Could not load this provider. Refresh to try again.").assertIsDisplayed()
+        compose.onNodeWithText("Hide provider errors").performClick()
+        compose.onNodeWithText("Fixture check").performScrollTo().performClick()
+        compose.onNodeWithText("Target: $target").assertDoesNotExist()
+        compose.onNodeWithText("Technical details").performScrollTo().performClick()
+        compose.onNodeWithText("Target: $target").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Open provider").assertDoesNotExist()
+    }
+
     @Test fun emptyMonitoringOffersConnectors() {
         var opened = false
         val store = MonitoringStore(BrowsingTransport { _, _ -> json("""{"rows":[],"providerErrors":[]}""") })
@@ -88,7 +106,7 @@ class BrowsingFixtureDeviceTest {
         val calls = mutableListOf<String>()
         val store = TriggersStore(BrowsingTransport { _, path ->
             calls.add(path)
-            if (path.endsWith("scheduler-status")) json("""{"cronEnabled":false}""") else json("""[{"id":"$trigger","name":"Fixture UTC cron","triggerType":"cron","enabled":true,"cronExpression":"0 * * * *","executionPrincipalUserId":"fixture-principal","executionAuthorizationStatus":"active","cleanupStatus":"pending","watchGroupId":"group-fixture","webhookSecret":"NEVER_DISPLAY"}]""")
+            if (path.endsWith("scheduler-status")) json("""{"cronEnabled":false}""") else json("""[{"id":"$trigger","name":"Fixture UTC cron","triggerType":"cron","enabled":true,"cronExpression":"0 * * * *","executionPrincipalUserId":"fixture-principal","executionAuthorizationStatus":"active","cleanupStatus":"pending","watchGroupId":"group-fixture","expiresAt":"2099-01-01T00:00:00Z","webhookSecret":"NEVER_DISPLAY"}]""")
         })
         val runs = TriggerRunsStore { requestedTeam, requestedTrigger, _ ->
             assertEquals(team, requestedTeam); assertEquals(trigger, requestedTrigger)
@@ -106,7 +124,10 @@ class BrowsingFixtureDeviceTest {
         compose.onNodeWithText("Clear filters").performClick()
         compose.onNodeWithText("Fixture UTC cron").performClick()
         compose.onNodeWithText("Schedule (UTC): 0 * * * *").assertIsDisplayed()
-        compose.onNodeWithText("Principal: fixture-principal").assertIsDisplayed()
+        compose.onNodeWithText("Expires:", substring = true).performScrollTo().assertTextContains("2099", substring = true)
+        compose.onNodeWithText("Principal: fixture-principal").assertDoesNotExist()
+        compose.onNodeWithText("Technical details").performScrollTo().performClick()
+        compose.onNodeWithText("Principal: fixture-principal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("NEVER_DISPLAY", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Existing runs").performScrollTo().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Existing fixture run").fetchSemanticsNodes().isNotEmpty() }

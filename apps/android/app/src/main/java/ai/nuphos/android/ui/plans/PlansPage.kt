@@ -161,7 +161,7 @@ private fun PlanRow(plan: Plan, onClick: () -> Unit) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             NuphosAvatar(creator?.asUser() ?: NuphosUser(id = plan.createdBy, name = "?"), size = 40.dp)
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(plan.title.ifEmpty { "Untitled plan" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(plan.title.ifEmpty { "Untitled plan" }, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val meta = buildList {
                     add(plan.displayNumber)
                     if (plan.progress.total > 0) add("${plan.progress.done}/${plan.progress.total} steps")

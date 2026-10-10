@@ -54,13 +54,14 @@ fun ProfileSheet(user: NuphosUser, onDismiss: () -> Unit) {
             }
             Text(user.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(24.dp))
-            Info("Name", user.name)
-            Info("Username", user.username, mono = true)
-            Info("Email", user.email)
-            Info("User ID", user.id, mono = true)
+            ai.nuphos.android.ui.components.TechnicalDetails(user.id) {
+                Info("User ID", user.id, mono = true)
+            }
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
             TextButton(onClick = { edit = true }, modifier = Modifier.fillMaxWidth()) { Text("Edit profile") }
             TextButton(onClick = { uri.openUri("https://nuphos.ai/privacy") }, modifier = Modifier.fillMaxWidth()) { Text("Privacy policy") }
+            HorizontalDivider(Modifier.padding(vertical = 12.dp))
+            Text("Account actions", style = MaterialTheme.typography.titleSmall)
             TextButton(onClick = { deletion = true }, modifier = Modifier.fillMaxWidth()) { Text("Account deletion request") }
             if (auth.aiAllowed) {
                 TextButton(onClick = { withdraw = true }, enabled = !auth.consentBusy, modifier = Modifier.fillMaxWidth()) { Text("Withdraw AI sharing consent") }
