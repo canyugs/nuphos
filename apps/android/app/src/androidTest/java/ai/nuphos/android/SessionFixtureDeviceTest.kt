@@ -74,6 +74,25 @@ class SessionFixtureDeviceTest {
         Assert.assertNull(session.loadError)
         return session
     }
+    @Test fun computerSelectionAndExplicitClearReachChatRequest() {
+        native = false
+        val session = session()
+        compose.runOnIdle {
+            session.credentialAccess = CredentialSelection(JsonValue.parse("""{"deviceIds":["mac","pc"],"awsRoleIds":["aws"]}""")!!)
+            Assert.assertTrue(session.send("Synthetic computer permissions"))
+        }
+        compose.waitUntil(10_000) { bodies.size == 1 && !session.isStreaming }
+        val access = bodies[0]["credentialAccess"]!!
+        Assert.assertEquals(listOf("mac", "pc"), access["deviceIds"]!!.arrayValue!!.map { it.stringValue })
+        Assert.assertEquals(listOf("aws"), access["awsRoleIds"]!!.arrayValue!!.map { it.stringValue })
+        compose.runOnIdle {
+            session.credentialAccess = CredentialSelection()
+            Assert.assertTrue(session.send("Synthetic clear permissions"))
+        }
+        compose.waitUntil(10_000) { bodies.size == 2 && !session.isStreaming }
+        Assert.assertTrue(bodies[1]["credentialAccess"]!!["deviceIds"]!!.arrayValue!!.isEmpty())
+    }
+
     @Test fun nativeReplyUsesReasonAndNeverWritesTranscript() {
         actor = true; owner = false
         actions = "{\"send\":false,\"reply\":true,\"steer\":true,\"cancel\":false}"

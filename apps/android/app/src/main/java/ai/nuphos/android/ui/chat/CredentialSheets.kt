@@ -1,6 +1,7 @@
 package ai.nuphos.android.ui.chat
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,10 +19,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import ai.nuphos.android.model.CredentialSelection
 import ai.nuphos.android.model.PermissionMode
@@ -49,18 +52,24 @@ fun CredentialPickerSheet(
         when {
             catalog == null && error != null -> Text(error, modifier = Modifier.padding(24.dp), color = MaterialTheme.colorScheme.error)
             catalog == null -> Text("Loading IAM…", modifier = Modifier.padding(24.dp))
-            catalog.isEmpty -> Text("No IAM connected. Connect cloud accounts in Nuphos to use them here.", modifier = Modifier.padding(24.dp))
+            catalog.isEmpty -> Text("No computers or IAM available. Connect a computer or cloud account in Nuphos to use it here.", modifier = Modifier.padding(24.dp))
             else -> LazyColumn {
                 catalog.sections.forEach { section ->
                     item { Text(section.provider.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.primary) }
+                    if (section.provider.optionsKey == "devices") {
+                        item { Text("Allow this conversation to operate the computers you select.", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall) }
+                    }
                     items(section.items, key = { it.id }) { item ->
+                        val computer = section.provider.optionsKey == "devices"
                         ListItem(
                             headlineContent = { Text(item.label) },
                             supportingContent = item.detail?.let { { Text(it) } },
                             trailingContent = {
-                                if (selection.contains(item)) Icon(Icons.Outlined.Check, contentDescription = null)
+                                if (computer) Checkbox(checked = selection.contains(item), onCheckedChange = null)
+                                else if (selection.contains(item)) Icon(Icons.Outlined.Check, contentDescription = null)
                             },
-                            modifier = Modifier.clickable { onSelectionChange(selection.toggle(item)) },
+                            modifier = if (computer) Modifier.toggleable(value = selection.contains(item), role = Role.Checkbox) { onSelectionChange(selection.toggle(item)) }
+                                else Modifier.clickable { onSelectionChange(selection.toggle(item)) },
                         )
                     }
                 }

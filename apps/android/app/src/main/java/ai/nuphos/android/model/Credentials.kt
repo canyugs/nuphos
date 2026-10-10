@@ -36,14 +36,22 @@ data class CredentialCatalog(
                 val detail = provider.detailKeys.firstNotNullOfOrNull {
                     row[it]?.stringValue?.takeIf { v -> v.isNotEmpty() && v != label }
                 }
-                Item(provider, id, label, detail)
+                Item(provider, id, label, if (provider.optionsKey == "devices") detail?.let(::platformName) else detail)
             }
             if (items.isEmpty()) null else Section(provider, items)
         },
     )
 
     companion object {
+        private fun platformName(platform: String) = when (platform) {
+            "darwin" -> "macOS"
+            "win32" -> "Windows"
+            "linux" -> "Linux"
+            else -> platform
+        }
+
         val PROVIDERS = listOf(
+            Provider("devices", "deviceIds", "My computers", "deviceId", listOf("label"), listOf("platform")),
             Provider("awsRoles", "awsRoleIds", "AWS", "roleId", listOf("accountAlias", "accountId"), listOf("roleArn")),
             Provider("gcpServiceAccounts", "gcpServiceAccountIds", "Google Cloud", "serviceAccountId", listOf("projectId"), listOf("serviceAccountEmail")),
             Provider("azureAccounts", "azureAccountIds", "Azure", "accountId", listOf("label"), listOf("subscriptionId")),
