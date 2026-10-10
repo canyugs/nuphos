@@ -220,6 +220,13 @@ fun ConversationScreen(
                 .padding(padding)
                 .consumeWindowInsets(padding),
         ) {
+            if (session.loaded && session.loadError == null) {
+                session.runtimeDeviceLabel?.let {
+                    Text("Agent: $it", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodyMedium, maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+            }
             if (session.loaded && session.loadError == null && session.isArchived) {
                 Text("Archived chat", Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -288,7 +295,6 @@ fun ConversationScreen(
                         }
                     }
                 }
-                session.runtimeDeviceLabel?.let { Text("Agent: $it", modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium) }
                 session.runtimeLabel?.let { Text(it, modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall) }
                 if (session.cancelRequested) Text("Cancellation requested", modifier = Modifier.padding(horizontal = 16.dp))
                 if (session.isNative && session.canCancel) TextButton(onClick = session::stop) { Text("Cancel run") }
