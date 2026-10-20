@@ -1,0 +1,20 @@
+{
+  "refresh-success-light.png": "6dc3c481bd79b174263140441bd1692142a018102a3f5e42e1f5aeb1d4f334f3",
+  "refresh-filters-light.png": "2a3a9833227d66a9d9e55c3460809b452442ab5b12f37b8c8fa266e16ade3a12",
+  "refresh-empty-light.png": "8ca20918f150f9089d5cf6cbcbc20fd0c53afec1e76107c930ac8e1009eafa0c",
+  "refresh-retry-light.png": "8b083ee89f7dfb867ab8a0f4b49a784ccc0a26ae97862d5181b3bf4d8c9f8f6b",
+  "refresh-refreshing-light.png": "c26638ec78edc299e07515a54e6201eed9edccefe6568b7eb7123b2b5dd0b01e",
+  "refresh-before-light.png": "9e30d99af875272bccb80a3c601c7da565297ea8dc0deb58311fc792aa975460",
+  "refresh-fold-draft-light.png": "8c2cfc7f94cc0cb2d8194db8f64b00d73e31432590faf3558200cdf610740cfb",
+  "refresh-initial-error-light.png": "342e80a95abf89bcec69702e7e265f80cad7d19ae1cec2f68d658a3496b7f35e",
+  "refresh-failed-retains-light.png": "f821856bc80381f12bd0cb594b4099f01b21966b03723bf1bd441acf3093eb79",
+  "refresh-gestures-reviewed.mp4": "d0b945e5cbc92645fd62f2765babd829620d544715c612bca3af4b8927559327",
+  "video-contact-reviewed.png": "1cd5e5a75c1ad79f80fb9025ee67238ce5560fb69508bb31c984a8096052c0c5",
+  "final-build.txt": "e3508f525c93a41a673a28a3bc7b4f43a5ef3ae8240721284fb9fceb98ba8b55",
+  "device-settled.txt": "b7ceb0a8c69fd33d3c5f393a47238fc59b1cb5262f22adfe26a194e3afb5ab99",
+  "video-test.txt": "3486fb45f9feee7dbc82f15608677a47d90027e7d4117663ee60316890343b97",
+  "jvm-summary.json": "fa874c499c2bc0cfc6fedc4edb09872fdc8949f7a8f43a0c1fc38c492d558958",
+  "python-tests.txt": "b0f0f6a7f9e018a3918d123ba61498318539d285c0326cd4625a1c33b9434a24",
+  "source-manifest.json": "8291811c900fd1f882164b46442f10c59cd21e903d228efb846ff832950836a0",
+  "README.md": "a0b5eb94cb8f8658f13e75d859dd6b97be18dde7c3935aa346bfe19f3e90bbd8"
+}

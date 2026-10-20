@@ -1,0 +1,14 @@
+{
+  "base": "03be279608d40f387794bbf4b9f1febfde3b6700",
+  "branch": "fix/android-chat-pull-refresh",
+  "validation": "Passed: 289 JVM, 16 Python, lint and APK builds, 7 physical fixtures + 1 recorded gesture sequence",
+  "files": {
+    "apps/android/README.md": "53148970c64de5a9c2a69517edf63202bd1fc35da49d44ea898a7ae29839ab29",
+    "apps/android/app/src/androidTest/java/ai/nuphos/android/PullRefreshFixtureDeviceTest.kt": "cb02896790b5a6b25b26b07908193c0339837a3e3f6c43f51517c6d3e237044a",
+    "apps/android/app/src/main/java/ai/nuphos/android/session/AgentStore.kt": "f35a718525fa0e85db72817a5a73a20e083e74819ef7dc5330a5a772c154c2b6",
+    "apps/android/app/src/main/java/ai/nuphos/android/session/HistoryRefresh.kt": "74b9dffe07b2df432a4b65268e4be544dae9baa98c032bd001329a12590b9f7b",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/agent/AgentPage.kt": "4d8f4c1e93ce05bd94415a53d5d3c252d8b1a6ec5099be515fbd0cd93e95745e",
+    "apps/android/app/src/test/java/ai/nuphos/android/session/HistoryRefreshTest.kt": "4f42cc1018d560b0a09d26108b2ef37f6225de1e6a6ea44731f9ed5200467881"
+  },
+  "publishedProductHead": "360502cc75a5652befa2b8963f7782fcc955c4cb"
+}
