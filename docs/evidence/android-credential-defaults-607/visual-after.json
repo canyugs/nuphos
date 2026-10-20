@@ -1,0 +1,12 @@
+{
+  "play": [
+    "versionCode=3 minSdk=33 targetSdk=36",
+    "versionName=1.0.2",
+    "lastUpdateTime=2026-10-18 19:31:34",
+    "installerPackageName=com.android.vending",
+    "firstInstallTime=2026-10-18 19:31:34"
+  ],
+  "rotation": "1",
+  "userRotation": "0",
+  "night": "Night mode: yes"
+}

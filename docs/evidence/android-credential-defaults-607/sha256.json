@@ -1,0 +1,14 @@
+{
+  "docs/evidence/android-credential-defaults-607/credential607-01-initial-loading-send-disabled.png": "46adf5bd57817b125d8a1e6e4c1d42a13f6fe12a790cccfd9a51aeca969bf7af",
+  "docs/evidence/android-credential-defaults-607/credential607-05-deselection-survives-refresh.png": "81923b4da4a18090166415c8f9fdca5d9129da6988619aa7f0392f60177f527e",
+  "docs/evidence/android-credential-defaults-607/credential607-04-defaults-online-cloud-selected-resend-excluded.png": "ee0d539896f22a317abc55a363c91dc6971f1b8675f49d59c15013595f791a8b",
+  "docs/evidence/android-credential-defaults-607/credential607-00-prior-empty-defaults-reconstructed.png": "7116d1eca442d088603ff9908e57b1baa789f49cd4adffb7ddf097e76b5e0fe5",
+  "docs/evidence/android-credential-defaults-607/credential607-06-explicit-resend-opt-in-survives-refresh.png": "32feb80f538821ac0d26ff531d8c35d5edad1ac6c19176c56636bb10cf6b29c8",
+  "docs/evidence/android-credential-defaults-607/credential607-03-failed-catalog-picker-error.png": "b3d5b470d64c12bd84f7c079534829b57694afc190b652bffb1fe2b5bd4e2f3c",
+  "docs/evidence/android-credential-defaults-607/credential607-02-failed-catalog-send-ready.png": "c185a98a12e16473b46b8745629ed9d8d1d29ff8c1638171eb8c8581c051d79a",
+  "docs/evidence/android-credential-defaults-607/CredentialDefaultsVisualFixtureDeviceTest.kt": "39fbe0344e0bd94c04245c2390da673de3085ef96accc49002c9dcd5c2fe4266",
+  "docs/evidence/android-credential-defaults-607/visual-complete-build.log": "9c51b96be848d9a0355f4e7f11616e98435dd0fb0881aaa56d98d39e41350f4e",
+  "docs/evidence/android-credential-defaults-607/visual-complete-device.log": "a57681260f34c101aa6956bbd5214fa990489122ed099eebbce84b1ffee3a7fe",
+  "docs/evidence/android-credential-defaults-607/visual-before.json": "0c196af4a24eae719890b7ab3b4c6d071542209b84ab3188ec7f18ecf5553f61",
+  "docs/evidence/android-credential-defaults-607/visual-after.json": "0c196af4a24eae719890b7ab3b4c6d071542209b84ab3188ec7f18ecf5553f61"
+}
