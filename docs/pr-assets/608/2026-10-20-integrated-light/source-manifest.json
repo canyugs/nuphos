@@ -1,0 +1,15 @@
+{
+  "head": "8f54999484925424796dd0c3c4f96688dc8effac",
+  "base": "c563d9fb0139a97586f8e5ac26abcdc35f8c0956",
+  "sourceFiles": {
+    "apps/android/README.md": "4ca9f7dd0362092667b00c81868637c799fb08e125ab28e14febb767ea6da0f8",
+    "apps/android/app/src/androidTest/java/ai/nuphos/android/PullRefreshFixtureDeviceTest.kt": "cb02896790b5a6b25b26b07908193c0339837a3e3f6c43f51517c6d3e237044a",
+    "apps/android/app/src/main/java/ai/nuphos/android/session/AgentStore.kt": "2b84aad5cfe592978f59b37b909f5153994c84dc2ee5b39685593f5317b8a6a3",
+    "apps/android/app/src/main/java/ai/nuphos/android/session/HistoryRefresh.kt": "74b9dffe07b2df432a4b65268e4be544dae9baa98c032bd001329a12590b9f7b",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/agent/AgentPage.kt": "7476bdf57c7f5117495c10d02226c3cd4033d98d8e9e5101770917cc9c855148",
+    "apps/android/app/src/test/java/ai/nuphos/android/session/HistoryRefreshTest.kt": "4f42cc1018d560b0a09d26108b2ef37f6225de1e6a6ea44731f9ed5200467881"
+  },
+  "localOnly": "applicationIdSuffix .refreshfixture; existing dev signer a0e99f4fdcfc952812f45083bf6fc77a50762c5b9d58c9c8103a46a48245aeac; all HTTP synthetic intercepted; FLAG_SECURE unchanged",
+  "validation": "303 JVM tests, lint, app and test APK builds; 7 Pixel8 fixtures in 18.069s; video case 1 pass in12.785s",
+  "limitation": "One isolated recording run without fixture stabilization saw initial-load request overlap in the count assertion; authoritative seven-case and recording-mode runs passed. No product behavior failure identified."
+}
