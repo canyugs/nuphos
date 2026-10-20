@@ -258,3 +258,20 @@ active notification; Android does not offer APNs-style independent numeric app b
 `PushParityDeviceTest` is opt-in (`localPushParity=true`) and requires the loopback debug build
 and its existing fixture binding. It checks same-conversation suppression, other-conversation
 foreground display, badge updates, zero-count clearing and rejection of another account's update.
+
+### Conversation watching
+
+On servers that return `watching`, readable conversations offer Watch/Unwatch in
+history and the conversation menu, including shared read-only conversations.
+Servers without that optional field hide the control. Unwatch also affects
+nested threads: Android reloads server state rather than inferring descendants
+from a partial history page. This preference does not grant notification
+permission, accept AI consent, or bypass active-chat suppression.
+
+`ConversationWatchFixtureDeviceTest` intercepts every HTTP request and uses
+synthetic identities. It requires both `isolatedWatch=true` and a separately
+built `ai.nuphos.android.watchfixture` installation; it refuses the production
+package. Never replace, uninstall or clear a Play installation to run it.
+Its API/UI/cascade checks and screenshots do not establish real subscription
+changes or FCM delivery. JVM tests cover optional model decoding, scoped
+PUT/DELETE confirmation, retry, shared-reader access and stale detail reads.
