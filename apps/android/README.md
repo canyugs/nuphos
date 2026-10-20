@@ -259,30 +259,31 @@ active notification; Android does not offer APNs-style independent numeric app b
 and its existing fixture binding. It checks same-conversation suppression, other-conversation
 foreground display, badge updates, zero-count clearing and rejection of another account's update.
 
-### Conversation model settings
+### New conversation credential defaults
 
-The composer opens Model settings after choosing an Agent. New conversations read
-that runtime's model-config catalog; choosing a model reloads its supported effort
-and fast controls. The first chat POST carries only confirmed initialSessionConfig
-alongside the existing credentialAccess and runtime binding. Resumed turns omit it.
-Existing conversations read and PATCH their own team-scoped model-config. Only the
-owner can change controls; runtime-advertised IDs and values define availability.
-Busy or streaming sessions retain the latest choice per control and show pending
-changes, with cancellation. Once idle, the model applies first and subsequent
-choices are checked against the returned capabilities. A failed write retains the
-choice for explicit retry or cancellation; offline and unsupported states disable
-editing. Leaving the session invalidates its outstanding requests and pauses its
-pending choices. Returning reads the server state before applying choices that
-remain valid, skipping settings the server already confirmed. Changing
-Agent/provider or withdrawing consent discards those choices. Workspace/account
-changes cannot apply a previous screen's result. An already sent PATCH may still
-complete on the server; the next visit reads the server's confirmed state.
+Each app launch and workspace switch starts a fresh in-memory credential draft.
+The first successful catalog load selects usable providers and online computers;
+Resend stays opt-in. The composer loads this catalog before the first send.
+A failed load permits sending with the current selection, matching iOS, and a
+later successful retry still supplies defaults. A successful empty catalog counts
+as loaded. Subsequent refreshes only prune IDs no longer offered, preserving
+manual deselection, explicit Resend opt-in, and selected computers that went
+offline. Old `nuphos.credentialSelection.<teamId>` preferences are no longer read
+or written. Existing conversations retain their server-provided credential access.
 
-`ModelSettingsStoreTest`, `ModelSettingsSessionTest` and `ModelSettingsApiTest` use
-synthetic state/transport to cover legal combinations, ordering, streaming/busy,
-retry/cancel, scope invalidation, Agent changes and initial wire data.
-`ModelSettingsFixtureDeviceTest` renders standalone light-mode controls with
-synthetic data, without reading auth/preferences or calling live endpoints.
-It must run in an isolated fixture package on a personal device, never over the
-installed Play application. These fixtures do not prove a real inference or
-production runtime setting change.
+`CredentialDraftTest` covers defaults, all provider identifiers, refresh and failure
+semantics, empty catalogs, request ordering, resets, and existing wire keys.
+
+New drafts send explicit empty arrays for unselected connector kinds. This matters
+because the backend treats omitted legacy connector keys as team-wide reach.
+That wire mode is limited to fresh drafts; stored conversation parsing and its
+original wire keys are unchanged. The new draft catalog includes the 30 provider
+kinds supported by iOS, including the eight connector kinds absent from Android's
+legacy catalog.
+
+`CredentialDefaultsFixtureDeviceTest` requires the separate
+`ai.nuphos.android.credentialfixture` installation. It intercepts every API read,
+uses a separate preference file, restores consent state and callbacks, and checks
+old preferences, new/stored sessions, exact catalog GETs, failed/empty catalogs,
+and late results after team, account or consent invalidation. It never opens an
+Activity or modifies a live integration. Default device runs skip this fixture.
