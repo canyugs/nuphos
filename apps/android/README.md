@@ -258,3 +258,18 @@ active notification; Android does not offer APNs-style independent numeric app b
 `PushParityDeviceTest` is opt-in (`localPushParity=true`) and requires the loopback debug build
 and its existing fixture binding. It checks same-conversation suppression, other-conversation
 foreground display, badge updates, zero-count clearing and rejection of another account's update.
+
+### Chat list refresh fixture
+
+Chat history supports the Material pull-to-refresh gesture on populated, empty,
+search and failed states. A gesture refreshes the current history filters and
+pinned shortcuts, keeps existing successful data on failure, and prevents
+pagination until refresh finishes. It does not reset the composer or tree folds.
+
+`HistoryRefreshTest` covers the refresh lifecycle on the JVM.
+`PullRefreshFixtureDeviceTest` intercepts all network requests and exercises real
+Compose swipe gestures, retries, filter retention, duplicate suppression and
+late workspace responses. It refuses any application ID that does not end in
+`.refreshfixture`. Build a separate local fixture variant with that application
+ID suffix and run only this test class; do not install a debug build over the
+Play application or clear its data. Keep `FLAG_SECURE` enabled.
