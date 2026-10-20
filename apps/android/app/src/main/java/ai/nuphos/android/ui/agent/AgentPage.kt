@@ -250,7 +250,11 @@ fun AgentPage(
         val draft = remember(draftAccount, draftTeam, draftAuth.generation, ai.nuphos.android.session.AiAccess.revision) {
             draftAccount?.let { draftAuth.composerDrafts.bind(it, draftTeam, ai.nuphos.android.session.ComposerDrafts.Destination.NewChat, ai.nuphos.android.session.AiAccess.bind(draftAuth.token.orEmpty())) }
         }
+        val modelSettings = remember(store, selection, selection?.selected, store.workspaceRevision) { store.bindNewModelSettings(selection) }
+        LaunchedEffect(modelSettings) { modelSettings?.refresh() }
         ChatComposer(
+            modelSettings = modelSettings,
+            canSubmit = modelSettings?.canStart != false,
             mentions = draftTeam?.let { team ->
                 remember(store, team) {
                     ai.nuphos.android.ui.chat.SessionMentionSource(team) { query ->
