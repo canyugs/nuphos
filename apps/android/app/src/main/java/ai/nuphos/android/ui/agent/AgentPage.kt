@@ -255,7 +255,6 @@ fun AgentPage(
         LaunchedEffect(modelSettings) { modelSettings?.refresh() }
         ChatComposer(
             modelSettings = modelSettings,
-            canSubmit = modelSettings?.canStart != false,
             mentions = draftTeam?.let { team ->
                 remember(store, team) {
                     ai.nuphos.android.ui.chat.SessionMentionSource(team) { query ->
@@ -279,7 +278,7 @@ fun AgentPage(
             },
             draft = draft,
             draftingEnabled = draft != null && draftAuth.aiAllowed && store.selectedTeam != null,
-            canSubmit = store.credentialsReady,
+            canSubmit = store.credentialsReady && modelSettings?.canStart != false,
             isStreaming = false,
             onSend = { submission ->
                 val session = store.newSession(selection) ?: return@ChatComposer false

@@ -31,13 +31,16 @@ class ModelSettingsApiTest {
         }
     }
     @Test fun initialSettingsCoexistWithExplicitCredentialSelectionAndRuntimeBinding() {
-        val credential = JsonValue.obj("awsRoleIds" to JsonValue.Arr(emptyList()))
+        val credential = ai.nuphos.android.model.CredentialSelection(newConversation = true).json
         val request = AgentChatApi.ChatRequest("new", "team", emptyList(), streamId = "s", credentialAccess = credential,
             runtimeId = "agent", agentRuntime = "codex", initialSessionConfig = mapOf("model" to "a", "effort" to "high", "fast" to "off"))
         val buffer = Buffer(); AgentChatApi.chatRequest("synthetic", request).body!!.writeTo(buffer)
         val body = JsonValue.parse(buffer.readUtf8())!!
         assertEquals("a", body["initialSessionConfig"]?.get("model")?.stringValue)
         assertEquals(credential, body["credentialAccess"]); assertEquals("agent", body["runtimeId"]?.stringValue)
+        val explicit = body["credentialAccess"] as JsonValue.Obj
+        assertEquals(30, explicit.value.size)
+        assertTrue(explicit.value.values.all { it.arrayValue?.isEmpty() == true })
         val resumed = request.copy(resume = true, initialSessionConfig = null)
         val other = Buffer(); AgentChatApi.chatRequest("synthetic", resumed).body!!.writeTo(other)
         assertNull(JsonValue.parse(other.readUtf8())!!["initialSessionConfig"])
