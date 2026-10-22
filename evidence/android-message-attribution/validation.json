@@ -1,0 +1,18 @@
+{
+  "productHead": "66a50c811fcf9962ad60717e9811d160b9466082",
+  "base": "39d631c4cfbdaaa9786a97cfd1547bbcddfdf4b0",
+  "jvm": {
+    "tests": 350,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": "PASS",
+  "debugAndTestApk": "PASS",
+  "device": "Pixel 8",
+  "isolatedPackage": "ai.nuphos.android.parity1316",
+  "fixtureTests": 1,
+  "fixtureSeconds": 2.943,
+  "theme": "light",
+  "limitations": "Synthetic components with no network/auth; attachment expansion uses a placeholder in the UI fixture and the production attachment data path has a JVM round-trip assertion. No Play app data, key, recording or release changed."
+}

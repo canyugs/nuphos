@@ -1,0 +1,9 @@
+{
+  "apps/android/README.md": "47a33543f3fe16502d8f3711a7cdccc3b7929cb2799b37c62d7d89cdbbcac9aa",
+  "apps/android/app/src/main/java/ai/nuphos/android/model/ChatRow.kt": "62b94f5e8e636ab607f214233bfb73c73668b260010960b8796070652a61ce71",
+  "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ConversationScreen.kt": "666590feefe63d1a55afdb3d5bda5c568b35419791b172fd1ebf256778bf8dc1",
+  "apps/android/app/src/androidTest/java/ai/nuphos/android/MessageAttributionFixtureDeviceTest.kt": "50fb57f294044cb534b025df9df1e756b8967397cc17515a5ecc4801a9d76313",
+  "apps/android/app/src/main/java/ai/nuphos/android/model/MessageAttribution.kt": "a42c604f045feadd5c8690a50c5c82e8b95347cb3fe52ac3be367c9c6170faf8",
+  "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/AgentEventRow.kt": "a1b235df3dd35ac94f2d515cb4cbfe231f38496ed5853c56bfeab8680212c8ed",
+  "apps/android/app/src/test/java/ai/nuphos/android/MessageAttributionTest.kt": "5d6f7192d5de1c5fa243cdcc6acf02c8c21d264596c650b65791afc85aca1f3b"
+}
