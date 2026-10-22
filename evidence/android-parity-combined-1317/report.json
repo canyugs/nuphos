@@ -1,0 +1,18 @@
+{
+  "candidateTree": "0010044f52e3a553e45a49922a40b4b299dddc44",
+  "sources": [
+    "66a50c811fcf9962ad60717e9811d160b9466082",
+    "ae856e302fce4fdeb2b7f44079dfef52959577dd"
+  ],
+  "jvm": 354,
+  "failures": 0,
+  "deviceCases": 4,
+  "deviceSeconds": 12.029,
+  "build": "PASS",
+  "lint": "PASS",
+  "package": "ai.nuphos.android.combined1317",
+  "limitations": "Synthetic fixture components only. Not a published merge or Play release. Viewport resize is not an actual keyboard.",
+  "playVersionCode": 4,
+  "playFirstInstall": "2026-10-21 09:05:16",
+  "playLastUpdate": "2026-10-21 11:09:23"
+}
