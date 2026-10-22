@@ -1,0 +1,8 @@
+{
+  "apps/android/app/src/androidTest/java/ai/nuphos/android/TranscriptScrollFixtureDeviceTest.kt": "d6f7c6aca9f4d56b966889b8064447e91e2447baf042a79d899fb94f2be60d6c",
+  "apps/android/app/src/main/java/ai/nuphos/android/model/ChatRow.kt": "f4e3084614f43b724bf85bd2cb5425c197202c661784eadac84a1e069c5095c7",
+  "apps/android/app/src/main/java/ai/nuphos/android/session/ChatSession.kt": "ba39998d64219384549724603c23483d7768af878bcda754fa7824b4fb91be3a",
+  "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ConversationScreen.kt": "f2ec5d266f5834fc656461ee0eba6595a2dbcd5c50531b449d8713b19ae752f8",
+  "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/TranscriptList.kt": "f89d86615302690e9043ebcb72f6922d7c844854e8b84233d419057ae1646084",
+  "apps/android/app/src/test/java/ai/nuphos/android/TimelineAlignmentTest.kt": "2714a53f459953f36070d201b6fcb06fb2cde4be212406c3b9deab01dec6d61b"
+}

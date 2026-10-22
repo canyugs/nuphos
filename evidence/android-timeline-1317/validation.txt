@@ -1,0 +1,4 @@
+Source HEAD: ae856e302fce4fdeb2b7f44079dfef52959577dd
+349 JVM tests: zero failures/errors/skips. lintDebug, debug app/test APK: PASS. Pixel 8: 3/3 Compose scroll tests PASS in 9.431s.
+The fixture uses production TranscriptList with synthetic text rows. It verifies reader position under same-row growth/new rows, bottom following, synthetic viewport resize, jump and own-send revision. Resize is not a real keyboard test. No network, paid calls, production package or FLAG_SECURE changes.
+Initial preliminary unit build emitted a Main dispatcher exception outside test XML; final full rerun succeeded without this message. Both logs retained locally.
