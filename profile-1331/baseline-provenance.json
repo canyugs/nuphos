@@ -1,0 +1,9 @@
+{
+  "baselineCommit": "ee98fddb1384d040cf5232dffa91da399bbacda9",
+  "productCommit": "f334ef9c065d7179595ab1fe6505d5ec33821271",
+  "provenance": "Before layout extracted from original ProfileSheet into a local-only stateless harness; actions replaced with callbacks and voice section replaced with the SAME static synthetic slot used by the after fixture. Pixel 8, same package, identity, viewport and theme arguments. Not historical production app captures. No production code changes after merge.",
+  "sha256": {
+    "profile-1331/before-light/profile-before.png": "9935682d4af40ad0b0f6c86d5d3d0c09f8df17a29a9db60d096962084e2006c0",
+    "profile-1331/before-dark/profile-before.png": "888841e660d42c6b06a39c3a9018251cb138e76c5482545a7355b16381efa10b"
+  }
+}
