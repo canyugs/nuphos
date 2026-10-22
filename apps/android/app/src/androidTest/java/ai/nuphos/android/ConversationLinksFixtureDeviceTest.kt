@@ -222,6 +222,10 @@ class ConversationLinksFixtureDeviceTest {
         file.outputStream().use {
             compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
+        val config = activity!!.resources.configuration
+        java.io.File(app.getExternalFilesDir(null), "$name.json").writeText(
+            """{"widthDp":${config.screenWidthDp},"heightDp":${config.screenHeightDp},"orientation":${config.orientation}}"""
+        )
     }
 
     @Test fun adaptiveBackNewDraftAndReopenAfterRecreation() {
@@ -253,12 +257,17 @@ class ConversationLinksFixtureDeviceTest {
         val size = args.getString("compactWindowSize")
         assumeTrue("Explicit simulated viewport size is required", size != null)
         check(size!!.matches(Regex("[0-9]{3,4}x[0-9]{3,4}")))
+        val rotation = args.getString("expandedWindowRotation")?.toIntOrNull()
+        assumeTrue("Explicit expanded viewport rotation is required", rotation != null)
+        check(rotation!! in 0..3)
+        fun shell(value: String): String = instrumentation.uiAutomation.executeShellCommand(value).use { fd ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.bufferedReader().readText() }
+        }
+        val originalRotation = shell("wm user-rotation").trim()
+        check(originalRotation.matches(Regex("free|lock [0-3]")))
         fun command(value: String) {
-            instrumentation.uiAutomation.executeShellCommand("wm size $value").use { fd ->
-                android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
-            }
-            Thread.sleep(500)
-            instrumentation.uiAutomation.executeShellCommand("input keyevent KEYCODE_WAKEUP").close()
+            shell("wm size $value")
+            shell("wm user-rotation lock $rotation")
         }
         fun awaitWidth(wide: Boolean) {
             compose.waitUntil(10_000) {
@@ -274,10 +283,12 @@ class ConversationLinksFixtureDeviceTest {
                 matches
             }
         }
+        shell("wm user-rotation lock $rotation")
         identity()
         adaptiveHistory = true
         launch(link())
         awaitText("Fixture content: fixture-chat")
+        awaitWidth(true)
         try {
             command(size)
             awaitWidth(false)
@@ -291,7 +302,8 @@ class ConversationLinksFixtureDeviceTest {
             awaitText("Fixture content: second-fixture-chat")
             snapshot("expanded-selected-chat")
         } finally {
-            command("reset")
+            shell("wm size reset")
+            shell("wm user-rotation $originalRotation")
         }
         assertNull(app.conversationLinks.value.value)
     }
