@@ -1,0 +1,49 @@
+
+ai.nuphos.android.PullRefreshFixtureDeviceTest:
+Error in returningFromDetailRefreshesCurrentSearchAndArchiveScope(ai.nuphos.android.PullRefreshFixtureDeviceTest):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:990)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:504)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.waitText(PullRefreshFixtureDeviceTest.kt:170)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.returningFromDetailRefreshesCurrentSearchAndArchiveScope(PullRefreshFixtureDeviceTest.kt:241)
+
+Error in resumeReadsNewRemoteHistoryAndPinsWithoutRelaunch(ai.nuphos.android.PullRefreshFixtureDeviceTest):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:990)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:504)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.waitText(PullRefreshFixtureDeviceTest.kt:170)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.resumeReadsNewRemoteHistoryAndPinsWithoutRelaunch(PullRefreshFixtureDeviceTest.kt:211)
+
+Error in resumeSupersedesReadStartedBeforeBackgrounding(ai.nuphos.android.PullRefreshFixtureDeviceTest):
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:990)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:504)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.waitText(PullRefreshFixtureDeviceTest.kt:170)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.resumeSupersedesReadStartedBeforeBackgrounding(PullRefreshFixtureDeviceTest.kt:224)
+
+
+Time: 19.741
+There were 3 failures:
+1) returningFromDetailRefreshesCurrentSearchAndArchiveScope(ai.nuphos.android.PullRefreshFixtureDeviceTest)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:990)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:504)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.waitText(PullRefreshFixtureDeviceTest.kt:170)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.returningFromDetailRefreshesCurrentSearchAndArchiveScope(PullRefreshFixtureDeviceTest.kt:241)
+2) resumeReadsNewRemoteHistoryAndPinsWithoutRelaunch(ai.nuphos.android.PullRefreshFixtureDeviceTest)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:990)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:504)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.waitText(PullRefreshFixtureDeviceTest.kt:170)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.resumeReadsNewRemoteHistoryAndPinsWithoutRelaunch(PullRefreshFixtureDeviceTest.kt:211)
+3) resumeSupersedesReadStartedBeforeBackgrounding(ai.nuphos.android.PullRefreshFixtureDeviceTest)
+androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+	at androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.waitUntil(ComposeUiTest.android.kt:990)
+	at androidx.compose.ui.test.junit4.AndroidComposeTestRule.waitUntil(AndroidComposeTestRule.android.kt:504)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.waitText(PullRefreshFixtureDeviceTest.kt:170)
+	at ai.nuphos.android.PullRefreshFixtureDeviceTest.resumeSupersedesReadStartedBeforeBackgrounding(PullRefreshFixtureDeviceTest.kt:224)
+
+FAILURES!!!
+Tests run: 3,  Failures: 3
+
+

@@ -1,0 +1,20 @@
+{
+  "productHead": "1c85b2f5e87dbebe1b5a5442a56e5aead61a4fbe",
+  "base": "fb88b7bd991b3d112e26b1345e426a01f3ddc876",
+  "fixture": "ai.nuphos.android.listrefresh1319",
+  "tests": "349 JVM pass; 10 Pixel8 tests pass; same three regression tests fail on unmodified main",
+  "play": "1.0.2 code4 firstInstall2026-10-21 09:05:16 lastUpdate2026-10-21 11:09:23 unchanged",
+  "limitations": "Synthetic intercepted transport only; Activity pause/resume and navigation lifecycle; no real chat, paid inference, real server mutations, Play replacement, key/draft changes or FLAG_SECURE change. Local applicationId differs; product build.gradle is unchanged.",
+  "files": {
+    "refresh-return-filtered-light.png": "c9ab63a1ca7fe8c14f86642d1d274565023de0af8ffc8b2f948a3845d64d8e65",
+    "refresh-resume-inflight-light.png": "52dc9eb9981a88fbce4ecf38d7803f0c391818f756a15864ab966759fe13e7d8",
+    "refresh-filters-light.png": "0ccd7d8a7da848f1a8b078bc58b7882aa11f85cc92bd1729b15f2b8c56bc18fd",
+    "refresh-resume-remote-light.png": "075bacac2c8b218c146661fb6d74d5d341870275231ceae57096b3959c87e764",
+    "refresh-before-light.png": "9601ed63afbcf1a2f0fcb8f312fb6cd08221a57cc9a6f606557718be41629502",
+    "refresh-fold-draft-light.png": "b2de7a3772e3db13786621d8f28360623603e7cbfa604554b6647e84b8bb7972",
+    "nuphos-list-refresh-control-device.log": "196cac5fee1df246c57724535234f89f41e37692864e3983db31a46412c9b2bb",
+    "nuphos-list-refresh-final-device.log": "a9b32015c4ce36971dfb16df53f4d26b957052f7ced79bb91001f8396c094bf2",
+    "nuphos-list-refresh-fixed-build.log": "888d3983aebf3f84395513abd27023e8f9e87d803e09ccf7c9a7ef9b59413824",
+    "product-manifest.json": "6e9d75e254c6ec567c0f7d061c6bc362ccf7a6cda5694d8b63fd4577d3b3ebe4"
+  }
+}
