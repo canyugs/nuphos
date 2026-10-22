@@ -1,0 +1,38 @@
+{
+  "base": "2bae389422c3573e641f0885957f7b4ad373ed3c",
+  "applicationId": "ai.nuphos.android.imageexport1336",
+  "testPackage": "ai.nuphos.android.imageexport1336.test",
+  "targetPackage": "ai.nuphos.android.imageexport1336",
+  "runner": "androidx.test.runner.AndroidJUnitRunner",
+  "apkSha256": {
+    "apps/android/app/build/outputs/apk/debug/app-debug.apk": "84954aa5e7c69c27ebbb71f912ef6ddd5cf48da68e5b201072f08c5b9332eb30",
+    "apps/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "d48512c45f411d3208b2d08dbb0a7088a13ae643eb5560bb1285ca945959bdfb"
+  },
+  "signature": "Signer #1 certificate DN: CN=Synthetic image export fixture\nSigner #1 certificate SHA-256 digest: df974736176c4c3c0627d68ff13547356b9c5e57301f34ee45b6dd6cd45b4b92\nSigner #1 certificate SHA-1 digest: e7f26b73d99307be0f012b5cef9df7e713921e44\nSigner #1 certificate MD5 digest: b5c5fe50f66c23d013713a004c7fbe20\n",
+  "validation": {
+    "jvmTests": 356,
+    "jvmFailures": 0,
+    "lint": "passed",
+    "pixel8Tests": 12,
+    "pixel8Failures": 0,
+    "pixel8Seconds": 15.697,
+    "exclusiveFlags": "rejected two true flags as expected",
+    "limits": [
+      "Synthetic fixtures only; no real account or attachment",
+      "No external receiver launched; cross-UID receiver behaviour not exercised",
+      "No release, production signing, Play changes or merge"
+    ]
+  },
+  "sourceSha256": {
+    "apps/android/README.md": "900470e2c156c876444dd5a98cb728646c4d3c8b2093515aa0fd54b756f11283",
+    "apps/android/app/build.gradle.kts": "098a6d72c36b3cdb47958a6b855dbe36cabbb4045cafe8052becf632844b6e80",
+    "apps/android/app/src/main/AndroidManifest.xml": "2fa703b83120bf25691c9655c6dfddbda055f514c28de226e2187afecc71ec23",
+    "apps/android/app/src/main/res/xml/image_export_paths.xml": "c6c29d947f927de0db1fd490247cb02df5364aafd297b7ca464a2b1bb9deea20",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/MessageImages.kt": "dc416480d5424bff62dba0e5a98d314556a70b9db1f0137415482338ee492a93",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/TransferCard.kt": "28680dd59e4c63e09679fc097ff0c156ecad4ce68b60f05b1ca75bfd18b792dc",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ImageExports.kt": "1507383c4d8080bd2ac1bb9ef213a2ccd346f892f7d69e5342cd185cae333827",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ImageExportActions.kt": "0899bf5dde50cf597baebb572627ae7907145969f6e0a6368c5b66e2e639416a",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ImageExportProvider.kt": "6332cacf3b9e688f8645c9c78f95d20b24cd3fb3135f906e161dffd471b0c0de",
+    "apps/android/app/src/androidTest/java/ai/nuphos/android/ImageExportsFixtureDeviceTest.kt": "d65008a1e2b61f5934dda5108a04690b3b6191934f5250d1f7457c894d908a83"
+  }
+}

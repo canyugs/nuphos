@@ -26,6 +26,12 @@ require(releaseVersionName.matches(Regex("[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}"))) {
     "nuphosVersionName must contain 1-64 filename-safe characters"
 }
 
+val enabledIsolationFlags = providers.gradlePropertiesPrefixedBy("nuphosIsolated").get()
+    .filterValues { it == "true" }.keys
+require(enabledIsolationFlags.size <= 1) {
+    "Enable only one isolated fixture flag: ${enabledIsolationFlags.sorted().joinToString()}"
+}
+
 android {
     namespace = "ai.nuphos.android"
     compileSdk = 37
@@ -45,6 +51,7 @@ android {
     buildTypes {
         debug {
             if (providers.gradleProperty("nuphosIsolatedAdaptiveFixture").orNull == "true") applicationIdSuffix = ".adaptivefixture"
+            if (providers.gradleProperty("nuphosIsolatedImageExportFixture").orNull == "true") applicationIdSuffix = ".imageexport1336"
             buildConfigField("String", "PUSH_BASE_URL", "\"$debugPushBaseUrl\"")
             buildConfigField("String", "API_BASE_URL", "\"$debugApiBaseUrl\"")
         }
