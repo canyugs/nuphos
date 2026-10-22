@@ -1,0 +1,77 @@
+{
+  "sourceHead": "c2729e8816633a01370c6756dfb5d0e3adbca752",
+  "environment": "Android 36 ARM64 Pixel Tablet AVD on M4",
+  "physicalFoldVerified": false,
+  "appApkSHA256": "0d7358cc6fae26eaebd8ad71421876742e5ba2503871f56c9501df3c5eed1bab",
+  "testApkSHA256": "57afb7ccde27724a3d11bcf68b8de1eafb31f54d836c2471776e8fc0e6f50278",
+  "captures": [
+    {
+      "file": "width-599-chat.png",
+      "sha256": "12dccd87911d302c0e9224d9adac2a891ef4c29471c6531174750ee3e655aa97",
+      "configuration": {
+        "widthDp": 599,
+        "heightDp": 900,
+        "orientation": 1
+      }
+    },
+    {
+      "file": "width-600-chat.png",
+      "sha256": "451dcdc5b734d8acb315aa7c41b2f4c7525879251196146a77f3703f63d83b82",
+      "configuration": {
+        "widthDp": 600,
+        "heightDp": 900,
+        "orientation": 1
+      }
+    },
+    {
+      "file": "width-1280-chat.png",
+      "sha256": "c72e09c6b36eb4f2fce4e5f9b381160155956c23522e8e5483f31acec7db3bce",
+      "configuration": {
+        "widthDp": 1280,
+        "heightDp": 900,
+        "orientation": 2
+      }
+    },
+    {
+      "file": "width-800-draft-ime.png",
+      "sha256": "513d171fdb1a4b863cb7878c7b197cf644808fd6320bd954b6dba7cd89a861ff",
+      "configuration": {
+        "widthDp": 800,
+        "heightDp": 900,
+        "orientation": 1
+      }
+    },
+    {
+      "file": "resize-540-next-chat.png",
+      "sha256": "0486e0ecb590f1f3717221afed730d392a372a30d5fab112c76e6b253569d160",
+      "configuration": {
+        "widthDp": 540,
+        "heightDp": 800,
+        "orientation": 1
+      }
+    },
+    {
+      "file": "tablet-800-portrait.png",
+      "sha256": "adf089403ea3e66c47d16ac1462fb2db1ef89213db011fe7392cefad7d835171",
+      "configuration": {
+        "widthDp": 800,
+        "heightDp": 1280,
+        "orientation": 1
+      }
+    }
+  ],
+  "physicalCaptures": [
+    {
+      "file": "physical-fold-open.png",
+      "sha256": "a11f72c414d885a9b92047fd6dffc13a289ea653c4114f0157808395f0bb725c",
+      "fixtureRevision": "bfc418d4062b7e4638669bdbf4571bb844d31ba6",
+      "note": "Predates the fixture-only metadata commit; production UI is identical to c2729e8816633a01370c6756dfb5d0e3adbca752. No physical folding is claimed."
+    },
+    {
+      "file": "physical-pixel8-portrait.png",
+      "sha256": "b5f1167d1a38615ec7ce8323fe19dd1b4ae7629ab961de499a0a133665dd3d1d",
+      "fixtureRevision": "bfc418d4062b7e4638669bdbf4571bb844d31ba6",
+      "note": "Predates the fixture-only metadata commit; production UI is identical to c2729e8816633a01370c6756dfb5d0e3adbca752. No physical folding is claimed."
+    }
+  ]
+}
