@@ -37,26 +37,34 @@ internal object ImageExports {
         "image"
     }
 
-    suspend fun prepare(context: Context, source: String, writer: ImageOriginalWriter): ExportedImage = withContext(Dispatchers.IO) {
-        val directory = File(context.cacheDir, "image-exports").apply { check(isDirectory || mkdirs()) }
-        directory.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > RETENTION) it.delete() }
-        check((directory.listFiles()?.size ?: 0) < 20) { "Too many pending exports" }
-        val temporary = File.createTempFile("image-", ".tmp", directory)
+    suspend fun prepare(context: Context, source: String, writer: ImageOriginalWriter): ExportedImage {
+        var owned: File? = null
         try {
-            val name = writer(source, temporary)
-            currentCoroutineContext().ensureActive()
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(temporary.path, bounds)
-            val extension = extensions[bounds.outMimeType] ?: throw IOException("Unsupported image")
-            require(bounds.outWidth in 1..100_000 && bounds.outHeight in 1..100_000 &&
-                bounds.outWidth.toLong() * bounds.outHeight <= 50_000_000L && temporary.length() in 1..104_857_600L)
-            val stem = name.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
-                .filter { it.isLetterOrDigit() || it in "-_ " }.trim().take(80).ifBlank { "image" }
-            val displayName = "$stem.$extension"
-            val ready = File(directory, "${temporary.nameWithoutExtension}-$displayName")
-            check(temporary.renameTo(ready))
-            ExportedImage(ready, bounds.outMimeType, displayName)
-        } finally { temporary.delete() }
+            val result = withContext(Dispatchers.IO) {
+                val directory = File(context.cacheDir, "image-exports").apply { check(isDirectory || mkdirs()) }
+                directory.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > RETENTION) it.delete() }
+                check((directory.listFiles()?.size ?: 0) < 20) { "Too many pending exports" }
+                val temporary = File.createTempFile("image-", ".tmp", directory)
+                try {
+                    val name = writer(source, temporary)
+                    currentCoroutineContext().ensureActive()
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(temporary.path, bounds)
+                    val extension = extensions[bounds.outMimeType] ?: throw IOException("Unsupported image")
+                    require(bounds.outWidth in 1..100_000 && bounds.outHeight in 1..100_000 &&
+                        bounds.outWidth.toLong() * bounds.outHeight <= 50_000_000L && temporary.length() in 1..104_857_600L)
+                    val stem = name.substringAfterLast('/').substringAfterLast('\\').substringBeforeLast('.')
+                        .filter { it.isLetterOrDigit() || it in "-_ " }.trim().take(80).ifBlank { "image" }
+                    val displayName = "$stem.$extension"
+                    val ready = File(directory, "${temporary.nameWithoutExtension}-$displayName")
+                    check(temporary.renameTo(ready))
+                    owned = ready
+                    ExportedImage(ready, bounds.outMimeType, displayName)
+                } finally { temporary.delete() }
+            }
+            owned = null
+            return result
+        } finally { owned?.delete() }
     }
 
     fun shareIntent(context: Context, image: ExportedImage): Intent {

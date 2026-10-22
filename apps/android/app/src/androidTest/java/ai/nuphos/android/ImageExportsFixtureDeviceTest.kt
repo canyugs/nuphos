@@ -7,6 +7,7 @@ import android.util.Base64
 import androidx.test.platform.app.InstrumentationRegistry
 import ai.nuphos.android.ui.chat.ImageExports
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -171,6 +172,42 @@ class ImageExportsFixtureDeviceTest {
         } finally {
             saved.forEach { context.contentResolver.delete(it, null, null) }
             image.file.delete()
+        }
+    }
+
+    @Test fun cancellationAfterIoRenameBeforeCallerDeliveryDeletesOwnedExport() = runBlocking {
+        isolated()
+        val queue = java.util.concurrent.LinkedBlockingQueue<Runnable>()
+        val caller = object : kotlinx.coroutines.CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue.add(block) }
+        }
+        val directory = java.io.File(context.cacheDir, "image-exports").apply { mkdirs() }
+        val before = directory.listFiles().orEmpty().map { it.name }.toSet()
+        val parent = kotlinx.coroutines.SupervisorJob()
+        val scope = kotlinx.coroutines.CoroutineScope(parent + caller)
+        try {
+            repeat(25) {
+                val job = scope.launch {
+                    ImageExports.prepare(context, "synthetic") { _, file -> file.writeBytes(bytes()); "synthetic" }
+                    fail("A cancelled caller must never receive the export")
+                }
+                requireNotNull(queue.poll(10, java.util.concurrent.TimeUnit.SECONDS)).run()
+                val delivery = requireNotNull(queue.poll(10, java.util.concurrent.TimeUnit.SECONDS))
+                val created = directory.listFiles().orEmpty().filter { it.name !in before }
+                assertEquals(1, created.size)
+                assertEquals("png", created.single().extension)
+                job.cancel()
+                delivery.run()
+                job.join()
+                assertEquals(before, directory.listFiles().orEmpty().map { it.name }.toSet())
+            }
+            val delivered = ImageExports.prepare(context, "synthetic") { _, file -> file.writeBytes(bytes()); "synthetic" }
+            try { assertTrue(delivered.file.isFile) } finally { delivered.file.delete() }
+            assertEquals(before, directory.listFiles().orEmpty().map { it.name }.toSet())
+        } finally {
+            parent.cancel()
+            while (true) (queue.poll() ?: break).run()
+            directory.listFiles().orEmpty().filter { it.name !in before }.forEach { it.delete() }
         }
     }
 
