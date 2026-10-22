@@ -1,0 +1,21 @@
+{
+  "productHead": "f334ef9c065d7179595ab1fe6505d5ec33821271",
+  "device": "Pixel 8",
+  "package": "ai.nuphos.android.profilefixture1331",
+  "scope": "Synthetic ProfileContent with a static voice-settings slot; not an authenticated production ProfileSheet or key storage test. Existing ProfileSheet action confirmations remain unchanged. Fold not used.",
+  "jvm": 354,
+  "deviceTests": {
+    "light": "3 PASS / 4.369s",
+    "dark": "3 PASS / 4.194s"
+  },
+  "sources": {
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/profile/ProfileSheet.kt": "a2fe994738ac45967774e8b7e5aec588f6b00e59379d8a2eb9fcf77f542b3939",
+    "apps/android/app/src/androidTest/java/ai/nuphos/android/ProfileLayoutDeviceTest.kt": "42ff602d209b8b6822c950266a59d6cee39f019acb37eceb611d060e31d79bf6"
+  },
+  "images": {
+    "dark/profile-bottom.png": "239b534137660edc696797fcc5d10d8d5b11aab7d7eb0516b2ece4e6343c0853",
+    "dark/profile-top.png": "78da5c8b337161896e6e309cf0687eb2174acce7cba400fb89fd417cc66b03a1",
+    "light/profile-bottom.png": "250b2a04364de239d096f8a7e0b9526d09de51533034ee1a87647f1ae96b049d",
+    "light/profile-top.png": "cd884562a5b52bc3cbc657ca3978c5d4c0a692eeba5c8dbff98409bfe636b985"
+  }
+}
