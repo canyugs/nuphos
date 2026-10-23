@@ -32,8 +32,8 @@
     }
   },
   "sourceSha256": {
-    "apps/android/README.md": "900470e2c156c876444dd5a98cb728646c4d3c8b2093515aa0fd54b756f11283",
-    "apps/android/app/build.gradle.kts": "098a6d72c36b3cdb47958a6b855dbe36cabbb4045cafe8052becf632844b6e80",
+    "apps/android/README.md": "83bdeaa8a8a20267a7a8eb72f4a16257f60d938e172f9434eb6e40767eaa3945",
+    "apps/android/app/build.gradle.kts": "32bb27b1ee409a337b5ddc71004e088cbb6cf64e8c3fe695c33b9d3fa6c3d84c",
     "apps/android/app/src/main/AndroidManifest.xml": "2fa703b83120bf25691c9655c6dfddbda055f514c28de226e2187afecc71ec23",
     "apps/android/app/src/main/res/xml/image_export_paths.xml": "c6c29d947f927de0db1fd490247cb02df5364aafd297b7ca464a2b1bb9deea20",
     "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/MessageImages.kt": "dc416480d5424bff62dba0e5a98d314556a70b9db1f0137415482338ee492a93",
@@ -42,5 +42,22 @@
     "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ImageExportActions.kt": "0899bf5dde50cf597baebb572627ae7907145969f6e0a6368c5b66e2e639416a",
     "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ImageExportProvider.kt": "6332cacf3b9e688f8645c9c78f95d20b24cd3fb3135f906e161dffd471b0c0de",
     "apps/android/app/src/androidTest/java/ai/nuphos/android/ImageExportsFixtureDeviceTest.kt": "eecd83769ae5aa6c5e76c6be1c2fd1a943143a871ec759c769e0a1601d200688"
+  },
+  "validationSourceCommit": "5e42581a3ca859855b688b646a78376ba5658588",
+  "integrationValidation": {
+    "upstreamMain": "0e19c69c5ac68c8e3d466015f9155a850e1bf99a",
+    "signedBaseMerge": "a82a82d8c62ec82520446e2eb9994178b3e46590",
+    "resolvedConflict": "apps/android/README.md",
+    "retainedSections": [
+      "Composer rich content",
+      "Image sharing and saving"
+    ],
+    "unchangedImageSourceFiles": 8,
+    "changedComparedWithValidatedHead": [
+      "apps/android/README.md",
+      "apps/android/app/build.gradle.kts"
+    ],
+    "gradleChange": "Preserve upstream nuphosIsolatedContentFixture alongside adaptive/image flags and generic mutual exclusion guard",
+    "deviceRetest": "Not repeated: integration resolution changes documentation only; prior Pixel 8 evidence applies to unchanged image product code. Integrated CI is required."
   }
 }
