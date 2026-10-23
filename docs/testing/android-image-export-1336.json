@@ -48,10 +48,7 @@
     "upstreamMain": "0e19c69c5ac68c8e3d466015f9155a850e1bf99a",
     "signedBaseMerge": "a82a82d8c62ec82520446e2eb9994178b3e46590",
     "resolvedConflict": "apps/android/README.md",
-    "retainedSections": [
-      "Composer rich content",
-      "Image sharing and saving"
-    ],
+    "retainedSections": ["Composer rich content", "Image sharing and saving"],
     "unchangedImageSourceFiles": 8,
     "changedComparedWithValidatedHead": [
       "apps/android/README.md",
