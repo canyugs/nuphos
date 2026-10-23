@@ -418,6 +418,7 @@ merged by session ID. Trigger runs and generic API readers keep activity order.
 menu selection, cursor reset, duplicate suppression, filtered refresh/navigation,
 and held first-page/cursor response races across a sort change. Use its existing
 isolated package restriction and optionally `-e refreshEvidence true` for captures.
+
 ### Native email sign-in fixture
 
 Email codes create accounts only after verification. The optional password control
@@ -438,3 +439,28 @@ or server-side password/session revocation; those require a separately approved
 isolated-account test plan.
 `EmailSessionFixtureDeviceTest` intercepts every request while testing duplicate
 submission, cancellation, token persistence and consent loading in the same isolated package.
+
+
+### Composer rich content
+
+The composer receives content-provider attachments through native paste, keyboard
+rich content and drag/drop, using Compose's state-based text field. Plain text
+continues through the text field; the receiver consumes only `content://` items.
+No clipboard polling or clipboard listener is installed. Photos and Files remain
+available, including videos through Files. Rich content uses the same bounded
+retention, image conversion and submission pipeline as selected files. Source
+permission payloads remain reachable until the app-owned copy is complete; no
+persistable URI permission or broad storage permission is requested.
+
+`ContentInputFixtureDeviceTest` requires the isolated
+`ai.nuphos.android.contentinput1337` package.
+Build it with `-PnuphosIsolatedContentFixture=true`. Its test-only provider serves
+fixed synthetic PNG/TXT data. It covers native clipboard paste, mixed text/file queueing, IME `commitContent`, exact retained
+bytes, invalid images, denied reads, empty files, count/size limits and cancellation
+when switching drafts during delayed reads. `ContentDropFixtureDeviceTest` uses
+a real Android drag gesture with synthetic content in the fixture window.
+The IME fixture uses an already readable synthetic provider: it does not prove a third-party IME's
+temporary permission grant or cross-app drag/drop. Verify those separately on
+a dedicated device with a third-party source app.
+Run existing composer draft, mention and voice fixtures after changing the text
+field implementation. Never install the fixture over the Play package.
