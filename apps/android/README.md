@@ -419,29 +419,26 @@ menu selection, cursor reset, duplicate suppression, filtered refresh/navigation
 and held first-page/cursor response races across a sort change. Use its existing
 isolated package restriction and optionally `-e refreshEvidence true` for captures.
 
-### Image sharing and saving
+### Composer rich content
 
-The full-screen message image pager offers Share image and Save image. Both use
-original bytes, never the sampled display bitmap. Inline data images are decoded
-locally; transfer images refresh their scoped group and use the existing
-credential-free storage downloader. Unsupported remote inline URLs remain
-unavailable; they are never sent to another app as a fallback.
+The composer receives content-provider attachments through native paste, keyboard
+rich content and drag/drop, using Compose's state-based text field. Plain text
+continues through the text field; the receiver consumes only `content://` items.
+No clipboard polling or clipboard listener is installed. Photos and Files remain
+available, including videos through Files. Rich content uses the same bounded
+retention, image conversion and submission pipeline as selected files. Source
+permission payloads remain reachable until the app-owned copy is complete; no
+persistable URI permission or broad storage permission is requested.
 
-Sharing uses a read-only FileProvider URI and Android's chooser. Only the
-`image-exports` cache directory is exposed; copies expire after 24 hours and are
-pruned on a later export, with at most 20 pending copies. Saving uses a pending
-MediaStore Images entry under Pictures/Nuphos and deletes it on write failure.
-No storage permission is requested. Existing transfer Save file remains available.
-
-`ImageExportsFixtureDeviceTest` requires a separate application ID ending in
-`.imageexport1336` (`-PnuphosIsolatedImageExportFixture=true`). It uses synthetic images to check original SHA-256, detected
-MIME, MediaStore publication, URI grants, expiry and failed downloads. It deletes
-its own saved images and never launches a share receiver or reads account data.
-
-Enable only one `nuphosIsolated*` flag per build; configuration rejects multiple
-true flags before selecting a suffix. Before installing a fixture, inspect the
-built application and androidTest APK manifests and record their SHA-256, actual
-package IDs, instrumentation runner, targetPackage and signing certificate in the
-validation evidence. Expected image fixture values are
-`ai.nuphos.android.imageexport1336`, its separate test package and
-`androidx.test.runner.AndroidJUnitRunner`; build properties alone are not proof.
+`ContentInputFixtureDeviceTest` requires the isolated
+`ai.nuphos.android.contentinput1337` package.
+Build it with `-PnuphosIsolatedContentFixture=true`. Its test-only provider serves
+fixed synthetic PNG/TXT data. It covers native clipboard paste, mixed text/file queueing, IME `commitContent`, exact retained
+bytes, invalid images, denied reads, empty files, count/size limits and cancellation
+when switching drafts during delayed reads. `ContentDropFixtureDeviceTest` uses
+a real Android drag gesture with synthetic content in the fixture window.
+The IME fixture uses an already readable synthetic provider: it does not prove a third-party IME's
+temporary permission grant or cross-app drag/drop. Verify those separately on
+a dedicated device with a third-party source app.
+Run existing composer draft, mention and voice fixtures after changing the text
+field implementation. Never install the fixture over the Play package.
