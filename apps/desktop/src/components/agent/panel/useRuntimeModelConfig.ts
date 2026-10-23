@@ -36,7 +36,7 @@ export function useRuntimeModelConfig(
             key,
             runtimeId,
             data: { status: 'offline', options: [] },
-            error: 'Could not load models. Check the agent connection and retry.',
+            error: 'Could not load models. Check the runtime connection and retry.',
           })
       },
     )
@@ -56,7 +56,6 @@ export function useRuntimeModelConfig(
     slow: false,
     saving: Boolean(shown) && pending,
     error: pending ? undefined : shown?.error,
-    stalled: false,
     queued: undefined,
     open,
     setOpen: (next: boolean) => {

@@ -266,13 +266,34 @@ describe('local runtime tunnel', () => {
     )
   })
 
-  test('presence lives only as long as the socket keeps answering', async () => {
+  test('a backlog of data without pongs keeps the tunnel open and present', async () => {
+    const bus = createLocalTunnelBus()
+    const presence = createMemoryPresenceStore()
+    const desktop = await connectDesktop(bus, presence, new Set(['t1']), {
+      heartbeatMs: 10,
+      idleTimeoutMs: 40,
+    })
+    const until = Date.now() + 150
+
+    // A busy tunnel: data keeps flowing and the pongs sit behind it.
+    while (Date.now() < until) {
+      desktop.send({ t: 'data', s: 'busy', d: 'x'.repeat(1024) })
+      await tick()
+    }
+    expect(desktop.closed).toBeUndefined()
+    expect(await presence.get(owner.userId, owner.deviceId)).not.toBeNull()
+  })
+
+  test('presence lives only as long as the computer keeps sending', async () => {
     let clock = 0
     const presence = createMemoryPresenceStore(() => clock)
-    const desktop = await connectDesktop(createLocalTunnelBus(), presence, new Set(['t1']))
+    const desktop = await connectDesktop(createLocalTunnelBus(), presence, new Set(['t1']), {
+      heartbeatMs: 1,
+    })
 
     clock += 10_000
-    desktop.send({ t: 'pong' })
+    await tick()
+    desktop.send({ t: 'data', s: 'busy', d: 'x' })
     await tick()
     clock += 10_000
     expect(await presence.get(owner.userId, owner.deviceId)).not.toBeNull()
@@ -287,7 +308,7 @@ describe('local runtime tunnel', () => {
   })
 })
 
-test('a socket and status alone do not advertise presence before the first pong', async () => {
+test('the first frame advertises presence with the status it carries', async () => {
   const presence = createMemoryPresenceStore()
   const tunnel = await attachRuntimeTunnel(
     'u1',
@@ -301,11 +322,70 @@ test('a socket and status alone do not advertise presence before the first pong'
   )
 
   tunnels.push(tunnel)
-  tunnel.receive(JSON.stringify({ t: 'status', status: { agents: {}, localExec: true } }))
   expect(await presence.get('u1', 'd1')).toBeNull()
-  tunnel.receive(JSON.stringify({ t: 'pong' }))
+  tunnel.receive(JSON.stringify({ t: 'status', status: { agents: {}, localExec: true } }))
   await tick()
   expect((await presence.get('u1', 'd1'))?.status?.localExec).toBe(true)
+})
+
+test('a model catalog over its bounds costs the catalog, never the presence', async () => {
+  const presence = createMemoryPresenceStore()
+  const tunnel = await attachRuntimeTunnel(
+    'u1',
+    'd1',
+    { send: () => {}, close: () => {} },
+    { bus: createLocalTunnelBus(), presence, isMember: async () => true },
+  )
+  const models = Array.from({ length: 201 }, (_, i) => ({ id: `m${i}`, name: `M${i}` }))
+
+  tunnels.push(tunnel)
+  tunnel.receive(
+    JSON.stringify({
+      t: 'status',
+      status: {
+        localExec: true,
+        agents: {
+          opencode: {
+            cli: { installed: true, loggedIn: true },
+            models: { models, defaultModel: 'm0', controls: {} },
+          },
+        },
+      },
+    }),
+  )
+  tunnel.receive(JSON.stringify({ t: 'pong' }))
+  await tick()
+  const status = (await presence.get('u1', 'd1'))?.status
+
+  expect(status?.localExec).toBe(true)
+  expect(status?.agents.opencode?.cli.loggedIn).toBe(true)
+  expect(status?.agents.opencode?.models).toBeUndefined()
+})
+
+test('a rejected frame is logged with its failing paths only', async () => {
+  const log = spyOn(console, 'warn').mockImplementation(() => {})
+  const tunnel = await attachRuntimeTunnel(
+    'u1',
+    'd1',
+    { send: () => {}, close: () => {} },
+    {
+      bus: createLocalTunnelBus(),
+      presence: createMemoryPresenceStore(),
+      isMember: async () => true,
+    },
+  )
+
+  tunnels.push(tunnel)
+  tunnel.receive(
+    JSON.stringify({ t: 'status', status: { agents: {}, cliVersion: 'x'.repeat(51) } }),
+  )
+  const lines = log.mock.calls.map((call) => String(call[0]))
+
+  log.mockRestore()
+  const line = lines.find((l) => l.includes('agent.local_runtime.frame_rejected'))
+
+  expect(line).toContain('status.cliVersion')
+  expect(line).not.toContain('xxxxx')
 })
 
 test('a late heartbeat or cleanup from the old holder cannot replace the new lease', async () => {

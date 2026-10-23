@@ -39,7 +39,7 @@ class SessionMentionFixtureDeviceTest {
     private var sends = 0
 
     @Before fun isolate() {
-        assumeTrue("Separate fixture package required", instrumentation.targetContext.packageName == "ai.nuphos.android.mentionfixture")
+        assumeTrue("Separate fixture package required", instrumentation.targetContext.packageName in setOf("ai.nuphos.android.mentionfixture", "ai.nuphos.android.contentinput1337"))
         val app = instrumentation.targetContext.applicationContext as NuphosApplication
         assertNull("Fixture must not have credentials", app.tokenStore.read())
         store = AgentStore("synthetic-no-credentials", instrumentation.targetContext)
@@ -92,19 +92,19 @@ class SessionMentionFixtureDeviceTest {
         compose.onNodeWithText("Synthetic project notes").assertDoesNotExist()
         assertEquals(0, sends)
         field().performTextReplacement("email@example.com")
-        compose.onNodeWithContentDescription("Dismiss chat mentions").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Dismiss agent mentions").assertDoesNotExist()
         field().performTextReplacement("@")
-        compose.onNodeWithContentDescription("Dismiss chat mentions").performClick()
+        compose.onNodeWithContentDescription("Dismiss agent mentions").performClick()
         field().assertTextEquals("@")
-        compose.onNodeWithContentDescription("Dismiss chat mentions").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Dismiss agent mentions").assertDoesNotExist()
         val dismissedCalls = calls.size
         field().performTextInput("x")
         Thread.sleep(300)
-        compose.onNodeWithContentDescription("Dismiss chat mentions").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Dismiss agent mentions").assertDoesNotExist()
         assertEquals(dismissedCalls, calls.size)
         field().performTextInput(" @again")
         compose.waitUntil(5000) { calls.contains("again") }
-        compose.onNodeWithContentDescription("Dismiss chat mentions").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Dismiss agent mentions").assertIsDisplayed()
         assertEquals(0, sends)
     }
 
@@ -134,15 +134,15 @@ class SessionMentionFixtureDeviceTest {
         snap("synthetic-mention-loading")
         field().performTextReplacement("@empty")
         compose.waitUntil(5000) { calls.any { it.endsWith(":empty") } }
-        compose.onNodeWithText("No matching chats").assertIsDisplayed()
+        compose.onNodeWithText("No matching agents").assertIsDisplayed()
         snap("synthetic-mention-empty")
         // Wait beyond the deliberately non-cooperative old request.
-        compose.waitUntil(5000) { compose.onAllNodesWithText("Searching chats…").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Searching agents…").fetchSemanticsNodes().isEmpty() }
         Thread.sleep(900)
         compose.onNodeWithText("Stale result").assertDoesNotExist()
         field().performTextReplacement("@error")
         compose.waitUntil(5000) { calls.any { it.endsWith(":error") } }
-        compose.onNodeWithText("Could not search chats. You can keep typing.").assertIsDisplayed()
+        compose.onNodeWithText("Could not search agents. You can keep typing.").assertIsDisplayed()
         snap("synthetic-mention-error")
         field().performTextReplacement("@next")
         compose.waitUntil(5000) { calls.any { it.endsWith(":next") } }

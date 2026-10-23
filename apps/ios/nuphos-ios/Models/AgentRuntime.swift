@@ -11,6 +11,10 @@ struct RuntimeInstance: Codable, Identifiable, Equatable, Hashable, Sendable {
         let ownerUserId: String
         let deviceId: String
         let deviceLabel: String
+        /// The runtime's own name; absent while it goes by its provider's.
+        var agentLabel: String? = nil
+        /// Whether its computer is connected now; nil from older backends.
+        var online: Bool? = nil
         /// The owner's own CLI sign-in; nil when their computer cannot tell.
         let signedIn: Bool?
     }
@@ -43,14 +47,6 @@ struct RuntimeInstance: Codable, Identifiable, Equatable, Hashable, Sendable {
     static func isLocalAgent(_ runtimeId: String?) -> Bool { runtimeId?.hasPrefix("local_") == true }
 
     var providerName: String { Provider.name(provider.rawValue) }
-
-    /// A computer's agent is named for the computer; its provider goes in `subtitle`.
-    var name: String {
-        guard tier == .myComputers else { return label }
-        if let deviceLabel = local?.deviceLabel, !deviceLabel.isEmpty { return deviceLabel }
-        let suffix = " · \(providerName)"
-        return label.hasSuffix(suffix) ? String(label.dropLast(suffix.count)) : label
-    }
 
     var subtitle: String? {
         let hint: String? =
@@ -192,8 +188,8 @@ struct SessionConfigState: Codable, Equatable, Sendable {
     var hint: String? {
         switch status {
         case .busy: "Changes apply after this reply."
-        case .dormant: options.isEmpty ? "Send a message to start this session before changing model settings." : nil
-        case .offline: "This agent is offline. Model settings return when it reconnects."
+        case .dormant: options.isEmpty ? "Send a message to start this agent before changing model settings." : nil
+        case .offline: "This runtime is offline. Model settings return when it reconnects."
         case .ready, .unsupported: nil
         }
     }

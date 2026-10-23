@@ -50,6 +50,9 @@ android {
 
     buildTypes {
         debug {
+            if (providers.gradleProperty("nuphosIsolatedContentFixture").orNull == "true") {
+                applicationIdSuffix = ".contentinput1337"
+            }
             if (providers.gradleProperty("nuphosIsolatedAdaptiveFixture").orNull == "true") applicationIdSuffix = ".adaptivefixture"
             if (providers.gradleProperty("nuphosIsolatedImageExportFixture").orNull == "true") applicationIdSuffix = ".imageexport1336"
             buildConfigField("String", "PUSH_BASE_URL", "\"$debugPushBaseUrl\"")

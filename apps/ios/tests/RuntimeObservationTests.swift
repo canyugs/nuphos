@@ -3,6 +3,7 @@ import Foundation
 @main
 struct RuntimeObservationTests {
     static func main() throws {
+        try BotAvatarTests.run()
         func snapshot(_ json: String, at time: Double) -> RuntimeObservation {
             RuntimeObservation(snapshot: JSONValue.parse(json)!, observedAt: time)
         }
@@ -156,6 +157,7 @@ struct RuntimeObservationTests {
         MessagePreviewTests.run()
         ComposerActionTests.run()
         SessionLinkTests.run()
+        AppLinkTests.run()
         SessionMentionTests.run()
         SidebarFavoritesTests.run()
         ConversationNestingTests.run()

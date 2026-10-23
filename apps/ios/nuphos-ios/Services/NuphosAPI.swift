@@ -1,16 +1,9 @@
 import Foundation
 
 /// Thin client for api.nuphos.ai, or the self-hosted backend chosen on the
-/// sign-in screen. Every call takes the bearer token; the session owns it.
-enum NuphosAPI {
-    static let defaultBaseURL = URL(string: "https://api.nuphos.ai")!
-    /// UserDefaults key for a self-hosted backend origin; unset means Nuphos Cloud.
-    static let baseURLKey = "apiBaseURL"
-
-    static var baseURL: URL {
-        UserDefaults.standard.string(forKey: baseURLKey).flatMap(URL.init(string:)) ?? defaultBaseURL
-    }
-
+/// sign-in screen (`NuphosAPIBase.swift`). Every call takes the bearer token;
+/// the session owns it.
+extension NuphosAPI {
     enum Failure: LocalizedError {
         case unauthorized
         case http(Int, message: String?)
@@ -90,7 +83,7 @@ enum NuphosAPI {
     /// `GET /agent/conversations/:sessionId?teamId=&tail=` — the last `tail`
     /// messages of a conversation.
     static func conversationDetail(
-        token: String, teamId: String, sessionId: String, tail: Int = 100
+        token: String, teamId: String, sessionId: String, tail: Int = 100, displayed: Bool = true
     ) async throws -> AgentConversationDetail {
         let detail: AgentConversationDetail = try await get(
             "agent/conversations/\(sessionId)",
@@ -98,7 +91,7 @@ enum NuphosAPI {
             token: token,
             timeout: 20
         )
-        ConversationUnread.shared.receive(team: teamId, session: sessionId, activity: detail.activitySeq, read: detail.readSeq, displayed: true)
+        ConversationUnread.shared.receive(team: teamId, session: sessionId, activity: detail.activitySeq, read: detail.readSeq, displayed: displayed)
         return detail
     }
 

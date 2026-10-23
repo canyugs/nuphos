@@ -1,4 +1,4 @@
-import { bool, optional } from './env'
+import { bool, optional, optionalList } from './env'
 
 // Per-team SaaS connectors. Most bind with a credential the team pastes, so the
 // only server-side setting is the BYOK key that encrypts it at rest; the OAuth
@@ -32,9 +32,21 @@ export function byosIntegrationsConfig() {
       // (Cloudflare below keeps an env override — prod sealed data with a
       // non-default id there.)
       encryptionKeyId: 'default',
-      // SSRF guard escape hatch: allow binding self-hosted GitLab instances on
-      // private/loopback addresses. Off by default; only enable in trusted nets.
-      allowPrivateHosts: bool('GITLAB_ALLOW_PRIVATE_HOSTS', false),
+    },
+    outbound: {
+      // Escape hatch for lib/net/safe-outbound: let team-configured hosts
+      // (Grafana, GitLab, SonarQube, Uptime Kuma, databases) resolve to
+      // private / loopback addresses. Off by default; development only.
+      // GITLAB_ALLOW_PRIVATE_HOSTS is the previous name.
+      allowPrivateHosts: bool(
+        'OUTBOUND_ALLOW_PRIVATE_HOSTS',
+        bool('GITLAB_ALLOW_PRIVATE_HOSTS', false),
+      ),
+      // Address ranges refused besides the private / reserved ones: the
+      // cluster's Service CIDR. Defaults to GKE's default Service range.
+      blockedCidrs: process.env.OUTBOUND_BLOCKED_CIDRS
+        ? optionalList('OUTBOUND_BLOCKED_CIDRS')
+        : ['34.118.224.0/20'],
     },
     cloudflare: {
       encryptionKey: optional('CLOUDFLARE_BYOK_ENCRYPTION_KEY'),

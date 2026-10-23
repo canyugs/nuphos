@@ -20,6 +20,7 @@ import { canEditMessage } from './messageEdit'
 import { AuthorizationActionContext } from './parts'
 import { waitingMessages } from './queuedAutoSend'
 import { QueuedStrip } from './QueuedStrip'
+import { serverHasConversation } from './sessionActions'
 
 import type { PanelViewCtx } from './ctx'
 import type { Message } from './model'
@@ -83,10 +84,11 @@ export function PanelConversationPage({ c }: { c: PanelViewCtx }) {
     [currentUserId, editableSessionId, foreignChat, forkConversation],
   )
   const modelSession =
-    activeTab?.sessionId && !activeTab.foreign && teamId
+    activeTab?.sessionId && !activeTab.foreign && teamId && serverHasConversation(activeTab)
       ? {
           sessionId: activeTab.sessionId,
           teamId,
+          runtimeId: activeTab.runtimeId,
         }
       : undefined
   // Only the owner decides who has access, so only they are offered an invite
@@ -242,7 +244,7 @@ export function PanelConversationPage({ c }: { c: PanelViewCtx }) {
         strokeWidth={1.7}
         aria-hidden="true"
       />
-      <span className="sr-only">Opening chat</span>
+      <span className="sr-only">Opening agent</span>
     </div>
   )
 }

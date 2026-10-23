@@ -98,7 +98,13 @@ export function JoinDialog({ join, onClose }: { join: BoxJoin; onClose: () => vo
 /** Open the same agent details panel as the usage table. */
 export function AgentTile({ agent, onSelect }: { agent: RuntimeInstance; onSelect: () => void }) {
   const offline = agentOffline(agent)
-  const label = `${agentName(agent)}${offline ? ' · Offline' : ''}`
+  // Signed out after a sign-in, it stays on the card: its page is where it signs in again.
+  const signedOut = agent.local?.signedIn === false
+  let state = ''
+
+  if (signedOut) state = ' · Sign in'
+  if (offline) state = ' · Offline'
+  const label = `${agentName(agent)}${state}`
 
   return (
     <li className="shrink-0">
@@ -107,7 +113,7 @@ export function AgentTile({ agent, onSelect }: { agent: RuntimeInstance; onSelec
         title={label}
         aria-label={`Open ${label} details`}
         onClick={onSelect}
-        className={`flex h-10 w-10 items-center justify-center rounded-lg bg-zGray-800/40 transition-colors hover:bg-zGray-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zViolet-500/60 ${offline ? 'opacity-40 grayscale' : ''}`}
+        className={`flex h-10 w-10 items-center justify-center rounded-lg bg-zGray-800/40 transition-colors hover:bg-zGray-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zViolet-500/60 ${offline || signedOut ? 'opacity-40 grayscale' : ''}`}
       >
         <AgentProviderIcon provider={agent.provider} className="h-5 w-5" />
       </button>
@@ -188,11 +194,11 @@ export function NewAgentMenu({
   return (
     <Menu>
       <MenuTrigger
-        aria-label={`New agent on ${device.label}`}
+        aria-label={`New runtime on ${device.label}`}
         render={<Button size="sm" variant="secondary" className="h-10" />}
       >
         <Plus className="h-3.5 w-3.5" />
-        New Agent
+        New runtime
       </MenuTrigger>
       <MenuContent align="start">
         {PROVIDERS.map((provider) => (
@@ -207,7 +213,9 @@ export function NewAgentMenu({
               : `Sign in to ${AGENT_PROVIDER[provider].label}`}
           </MenuItem>
         ))}
-        {!canAddAgents && <MenuItem disabled>Update the Box host to add more agents</MenuItem>}
+        {!canAddAgents && (
+          <MenuItem disabled>Update the computer host to add more runtimes</MenuItem>
+        )}
       </MenuContent>
     </Menu>
   )

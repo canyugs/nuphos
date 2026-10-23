@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 
 import { api } from '../../api'
 import { AgentProviderIcon } from '../../components/agent/panel/icons'
-import { RuntimeUsageBar } from './RuntimeUsageBar'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { InlineRename } from '../../components/ui/inline-rename'
 import { toast } from '../../components/ui/toast'
@@ -12,15 +11,15 @@ import { AGENT_PROVIDER } from '../../types/runtime'
 
 import { AgentAddedBy } from './AgentAddedBy'
 import { agentName, localRemovalId } from './agentPresentation'
-import { boxRestarts } from './boxRestartStore'
 import { RuntimeActionsMenu } from './RuntimeActionsMenu'
 import { RuntimeLoginDialog } from './RuntimeLoginDialog'
 import { RuntimeMetricsCharts } from './RuntimeMetricsCharts'
 import { RuntimeOverview, RuntimeUsageSection } from './RuntimeOverview'
 import { STATUS_DOT, runtimeStatusView } from './runtimePresentation'
 import { RuntimeSignIn } from './RuntimeSignIn'
-import { runtimeUpdatePresentation } from './runtimeUpdatePresentation'
 import { RuntimeUpdateNotice } from './RuntimeUpdateNotice'
+import { runtimeUpdatePresentation } from './runtimeUpdatePresentation'
+import { RuntimeUsageBar } from './RuntimeUsageBar'
 
 import type { PolledRuntimeStatus } from './RuntimeOverview'
 import type { RuntimeInstance, RuntimeQuota } from '../../types/runtime'
@@ -83,7 +82,7 @@ export function RuntimeInstanceCard({
       await action()
       changed()
     } catch (error) {
-      toast.apiError('Could not update agent', error)
+      toast.apiError('Could not update runtime', error)
     } finally {
       setBusy(false)
     }
@@ -104,8 +103,10 @@ export function RuntimeInstanceCard({
   const kindTag =
     instance.kind === 'external' ? 'External' : instance.kind === 'development' ? 'Local' : null
   const hosted = instance.kind === 'managed' || instance.kind === 'external'
-  // A Box's agents report an update only when their host can install it (box-update.ts).
-  const updatable = instance.kind === 'managed' || instance.kind === 'local'
+  const updatable = instance.kind === 'managed'
+  // A Box's update restarts its host and every agent on it, so it lives on the Box's card.
+  const runtimeUpdate =
+    statusError || instance.kind === 'local' ? undefined : runtime?.runtimeUpdate
 
   return (
     <section aria-label={instance.label} className="mx-auto w-full max-w-5xl">
@@ -125,24 +126,18 @@ export function RuntimeInstanceCard({
                   canEdit={canEdit}
                   editing={editing}
                   onEditingChange={setEditing}
-                  ariaLabel="Agent name"
-                  errorTitle="Could not rename agent"
+                  ariaLabel="Runtime name"
+                  errorTitle="Could not rename runtime"
                   onSave={async (label) => {
                     await rename(label)
                     changed()
                   }}
                 />
               </h3>
-              {!statusError &&
-                runtime?.runtimeUpdate &&
-                ['available', 'waiting', 'updating', 'failed'].includes(
-                  runtime.runtimeUpdate.state,
-                ) && (
+              {runtimeUpdate &&
+                ['available', 'waiting', 'updating', 'failed'].includes(runtimeUpdate.state) && (
                   <span className="shrink-0 rounded border border-zViolet-500/30 bg-zViolet-500/10 px-1.5 py-0.5 text-[10px] text-zViolet-400">
-                    {
-                      runtimeUpdatePresentation(runtime.runtimeUpdate, updatable, canEdit, enabled)
-                        .title
-                    }
+                    {runtimeUpdatePresentation(runtimeUpdate, updatable, canEdit, enabled).title}
                   </span>
                 )}
               {kindTag && (
@@ -190,16 +185,12 @@ export function RuntimeInstanceCard({
         />
       </div>
       <RuntimeUpdateNotice
-        update={statusError ? undefined : runtime?.runtimeUpdate}
+        update={runtimeUpdate}
         managed={updatable}
         canUpdate={canEdit && updatable}
         enabled={enabled}
-        box={instance.local?.deviceLabel}
         onUpdate={async () => {
           const result = await api.atlasRequestRuntimeUpdate(teamId, instance.id)
-
-          // Its Box's card follows the host away and back.
-          if (instance.local) boxRestarts.start(instance.local.deviceId, teamId, 'update')
 
           setRuntime(
             (previous) =>
@@ -207,8 +198,7 @@ export function RuntimeInstanceCard({
                 ...previous,
                 runtimeUpdate: {
                   ...previous.runtimeUpdate,
-                  // A managed agent's update waits for its conversations; a Box's starts now.
-                  state: instance.kind === 'local' ? 'updating' : 'waiting',
+                  state: 'waiting',
                   targetVersion: result.version,
                   releaseUrl:
                     previous.runtimeUpdate?.releaseUrl ??
@@ -216,21 +206,20 @@ export function RuntimeInstanceCard({
                 },
               },
           )
-          // A Box's host still reports the old CLI until it stops; the next poll sees it go.
-          if (instance.kind !== 'local') setUpdateRevision((value) => value + 1)
+          setUpdateRevision((value) => value + 1)
         }}
       />
       <div className="divide-y divide-zGray-800/60 border-t border-zGray-800/60">
         {instance.deletion ? (
           <p className="px-4 py-3 text-xs leading-relaxed text-secondary" role="status">
             {instance.deletion.error ??
-              'Removing the agent and its files. Conversation history stays in Nuphos.'}
+              'Removing the runtime and its files. Agent history stays in Nuphos.'}
           </p>
         ) : (
           <>
             {runtime?.credentialRevoked ? (
               <p className="px-4 py-4 text-xs leading-relaxed text-secondary">
-                The agent’s owner revoked this team’s connection from its console. Generate a new
+                The runtime’s owner revoked this team’s connection from its console. Generate a new
                 pairing code there, connect again and choose Update existing connection.
               </p>
             ) : (
@@ -268,15 +257,15 @@ export function RuntimeInstanceCard({
           title={`Remove ${instance.label}?`}
           description={
             instance.kind === 'managed'
-              ? 'This permanently deletes the agent, its disks, workspaces, and sign-in, and stops running conversations. Your conversation history stays in Nuphos. Move any workspace you want to keep to another agent before removing this one.'
+              ? 'This permanently deletes the runtime, its disks, workspaces, and sign-in, and stops agents running on it. Your agent history stays in Nuphos. Move any workspace you want to keep to another runtime before removing this one.'
               : instance.local && !instance.local.instanceId
-                ? `This signs ${instance.label} out on ${instance.local.deviceLabel} and deletes its ${instance.provider === 'codex' ? 'settings' : 'CLI history and settings'} there. Conversations on it stop working; their history stays in Nuphos.`
+                ? `This signs ${instance.label} out on ${instance.local.deviceLabel} and deletes its ${instance.provider === 'codex' ? 'settings' : 'CLI history and settings'} there. Agents on it stop working; their history stays in Nuphos.`
                 : instance.local
                   ? `This removes the agent and its sign-in from ${instance.local.deviceLabel}. Your conversation history stays in Nuphos.`
-                  : 'This disconnects the external agent. Its files remain on the external machine. Your conversations stay in Nuphos and can be moved using conversation history.'
+                  : 'This disconnects the external runtime. Its files remain on the external machine. Your agents stay in Nuphos and can be moved to another runtime with their history.'
           }
           destructive
-          confirmLabel="Remove agent"
+          confirmLabel="Remove runtime"
           onConfirm={() =>
             mutate(() =>
               // The menu offers removal for a computer's agent only when it has a removal id.
