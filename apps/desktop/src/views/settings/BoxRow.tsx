@@ -14,6 +14,7 @@ import { visibleAgent } from './agentPresentation'
 import { BoxAccessDialog } from './BoxAccessDialog'
 import { BoxAgentSetup } from './BoxAgentSetup'
 import { openBoxDesktop } from './boxDesktop'
+import { BoxHostUpdate } from './BoxHostUpdate'
 import { BoxMetrics } from './BoxMetrics'
 import { AccessHint, AgentTile, LiveDot, MachineIcon, MachineLine, NewAgentMenu } from './BoxParts'
 import { openBoxPaywall } from './boxPaywallStore'
@@ -29,6 +30,7 @@ import {
 import { boxRestartLabel, boxRestartOf } from './boxRestartPresentation'
 import { boxRestarts, useBoxRestart } from './boxRestartStore'
 import { RuntimeLoginDialog } from './RuntimeLoginDialog'
+import { useBoxHostUpdate } from './useBoxHostUpdate'
 
 import type { AgentDevice } from '../../api'
 import type { LocalAgentProvider } from '../../api/device-types'
@@ -92,7 +94,7 @@ export function BoxRow({
 
   // The host takes a while to join after the machine starts; the card follows it until then.
   const resume = () =>
-    act('Could not resume Box', async (deviceId, team) => {
+    act('Could not resume computer', async (deviceId, team) => {
       await api.boxResume(deviceId, team)
       boxRestarts.start(deviceId, team, 'resume')
     })
@@ -111,6 +113,15 @@ export function BoxRow({
     settingUp || restart !== undefined || (state === 'running' && agents.length === 0)
   const metricsStatus = settingUp ? state : device.metricsStatus
   const away = !restart && (state === 'paused' || state === 'hostOffline')
+  const hostAgent = cloud && manage && state === 'running' && !restart ? agents[0]?.id : undefined
+  const updateVersion = useBoxHostUpdate(teamId, hostAgent)
+  const [confirmUpdate, setConfirmUpdate] = useState(false)
+  const update = () =>
+    act('Could not update computer', async (deviceId, team) => {
+      if (!hostAgent) return
+      await api.atlasRequestRuntimeUpdate(team, hostAgent)
+      boxRestarts.start(deviceId, team, 'update')
+    })
 
   return (
     <li className="flex h-[240px] w-[248px] shrink-0 flex-col rounded-xl border border-zGray-800/70 p-3">
@@ -123,9 +134,9 @@ export function BoxRow({
           canEdit={manage}
           editing={renaming}
           onEditingChange={setRenaming}
-          ariaLabel={cloud ? 'Box name' : 'Computer name'}
+          ariaLabel="Computer name"
           maxLength={200}
-          errorTitle={`Could not rename ${cloud ? 'Box' : 'computer'}`}
+          errorTitle="Could not rename computer"
           className="flex-1 text-[13px] font-medium text-main"
           // This computer keeps its name locally and re-registers with it, so rename it there.
           onSave={async (label) => {
@@ -150,6 +161,11 @@ export function BoxRow({
                   Open desktop
                 </MenuItem>
               )}
+              {updateVersion !== undefined && (
+                <MenuItem onClick={() => setConfirmUpdate(true)}>
+                  {updateVersion ? `Update to v${updateVersion}` : 'Update'}
+                </MenuItem>
+              )}
               <MenuItem onClick={() => setRenaming(true)}>Rename</MenuItem>
               {canShareBox(device) && (
                 <MenuItem onClick={() => setSharing(true)}>Manage access…</MenuItem>
@@ -160,7 +176,7 @@ export function BoxRow({
                 </MenuItem>
               )}
               {actions.pause && (
-                <MenuItem onClick={() => void act('Could not pause Box', api.boxPause)}>
+                <MenuItem onClick={() => void act('Could not pause computer', api.boxPause)}>
                   Pause
                 </MenuItem>
               )}
@@ -186,6 +202,16 @@ export function BoxRow({
           {restart ? boxRestartLabel(restart.kind) : badge.label}
         </span>
         <AccessHint device={device} />
+        {updateVersion !== undefined && (
+          <BoxHostUpdate
+            boxLabel={device.label}
+            version={updateVersion}
+            busy={busy}
+            confirming={confirmUpdate}
+            onConfirmingChange={setConfirmUpdate}
+            onUpdate={() => void update()}
+          />
+        )}
       </div>
       <MachineLine device={device} thisComputer={thisComputer} dim={dim} />
       {manage && away ? (

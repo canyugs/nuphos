@@ -73,9 +73,14 @@ useModels({
 })
 
 useAuthMiddleware({
-  requireTeamRole: () => async (_c: unknown, next: () => Promise<void>) => {
-    await next()
-  },
+  // Admits everyone but keeps the roles on the gate, which the route table reads.
+  requireTeamRole: (...teamRoles) =>
+    Object.assign(
+      async (_c: unknown, next: () => Promise<void>) => {
+        await next()
+      },
+      { teamRoles },
+    ),
 })
 
 useByosSecrets({
@@ -438,7 +443,8 @@ describe('GET /posthog-app', () => {
 
     expect(link.searchParams.get('error')).toBe('access_denied')
     expect(exchanges).toHaveLength(0)
-    expect(pending).toHaveLength(0)
+    // The state in the URL is not proof of being the requester: it stays put.
+    expect(pending).toHaveLength(1)
   })
 
   test('rejects an unknown state without exchanging', async () => {

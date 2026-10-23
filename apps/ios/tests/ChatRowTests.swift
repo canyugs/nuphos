@@ -87,7 +87,7 @@ enum ChatRowTests {
             return m
         }
         let agent = message("agent.thread", "agent", "s1", "Reviewer", runtime: "codex").event
-        precondition(agent == .init(name: "Reviewer", logo: "logo-openai", text: "First line\n\nDetails"))
+        precondition(agent == .init(name: "Reviewer", logo: "logo-openai", text: "First line\n\nDetails", agentId: "s1", runtime: "codex"))
         precondition(message("agent.thread", "agent", "nuphos", "Nuphos").event?.logo == nil)
         precondition(message("agent.resource", "system", "GitHub", "GitHub").event?.logo == "logo-github")
         precondition(message("agent.resource", "system", "trigger:1", "Hourly scan").event?.logo == nil)
@@ -110,6 +110,13 @@ enum ChatRowTests {
         for bad in ["https://evil.example/avatar", "http://lh3.googleusercontent.com/avatar", "https://lh3.googleusercontent.com.evil.example/avatar", "https://user@lh3.googleusercontent.com/avatar", "https://lh3.googleusercontent.com:444/avatar"] {
             canonical.metadata = .object(["version": .number(1), "sender": .object(["displayName": .string("Teammate"), "avatarURL": .string(bad)])])
             precondition(canonical.sender?.avatar == nil)
+        }
+        // A photo uploaded to the signed-in backend, a user's or an agent token's.
+        let api = URL(string: "https://api.nuphos.ai")!
+        let uploaded = "https://api.nuphos.ai/avatars/\(String(repeating: "a", count: 24))/\(String(repeating: "b", count: 64)).webp"
+        precondition(ChatMessage.Sender(name: "Grok Bot", avatarURL: uploaded, apiBase: api).avatar != nil)
+        for bad in [uploaded + "?x=1", uploaded.replacingOccurrences(of: "api.nuphos.ai", with: "evil.example"), "https://api.nuphos.ai/avatars/x.webp", "https://api.nuphos.ai/teams/a/avatar.webp"] {
+            precondition(ChatMessage.Sender(name: "Grok Bot", avatarURL: bad, apiBase: api).avatar == nil)
         }
         canonical.metadata = nil
         precondition(canonical.sender == nil)

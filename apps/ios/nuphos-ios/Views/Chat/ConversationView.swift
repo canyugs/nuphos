@@ -25,6 +25,7 @@ struct ConversationView: View {
     @State private var renamedTitle = ""
     @State private var showRuntimes = false
     @State private var showShare = false
+    @State private var referencedAgents = ReferencedAgents()
 
     private var rows: [ChatRow] { ChatRow.rows(for: session) }
 
@@ -38,7 +39,7 @@ struct ConversationView: View {
         if !session.loaded || session.awaitingReplay {
             ProgressView().tint(Theme.muted)
         } else if let loadError = session.loadError {
-            ContentUnavailableView("Couldn't load this chat", systemImage: "exclamationmark.bubble", description: Text(loadError))
+            ContentUnavailableView("Couldn't load this agent", systemImage: "exclamationmark.bubble", description: Text(loadError))
         }
     }
 
@@ -84,7 +85,7 @@ struct ConversationView: View {
             #endif
         }
         .onChange(of: scenePhase) { _, _ in updateReading() }
-        .alert("Rename chat", isPresented: $showRename) {
+        .alert("Rename agent", isPresented: $showRename) {
             TextField("Title", text: $renamedTitle)
             Button("Cancel", role: .cancel) {}
             Button("Save") {
@@ -130,7 +131,7 @@ struct ConversationView: View {
                             Button("Rename", systemImage: "pencil") { renamedTitle = session.title; showRename = true }
                         }
                         if session.canManage {
-                            Button("Switch agent", systemImage: "arrow.left.arrow.right") { showRuntimes = true }
+                            Button("Switch runtime", systemImage: "arrow.left.arrow.right") { showRuntimes = true }
                                 .disabled(session.isStreaming)
                             Button {
                                 Task {
@@ -155,14 +156,14 @@ struct ConversationView: View {
                         // this is what shows it was taken. A Label, not a bare
                         // Image: the bar takes it as a native item, so the
                         // whole glass answers, not just the glyph.
-                        if updating { ProgressView() } else { Label("Chat options", systemImage: "ellipsis") }
+                        if updating { ProgressView() } else { Label("Agent options", systemImage: "ellipsis") }
                     }
                     .disabled(updating)
-                    .accessibilityLabel("Chat options")
+                    .accessibilityLabel("Agent options")
                 }
             }
         }
-        .alert("Couldn't update chat", isPresented: Binding(get: { archiveError != nil }, set: { if !$0 { archiveError = nil } })) {
+        .alert("Couldn't update agent", isPresented: Binding(get: { archiveError != nil }, set: { if !$0 { archiveError = nil } })) {
             Button("OK") { archiveError = nil }
         } message: {
             Text(archiveError ?? "")
@@ -180,20 +181,7 @@ struct ConversationView: View {
             }
         }
         .sheet(item: $planLink) { target in
-            NavigationStack {
-                PlanDetailView(
-                    planId: target.planId,
-                    teamId: target.teamId,
-                    approve: { plan in try await session.approvePlan(plan.id) },
-                    showsChatActions: false
-                )
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { planLink = nil }
-                    }
-                }
-            }
-            .presentationDetents([.large])
+            PlanLinkSheet(target: target, approve: { plan in try await session.approvePlan(plan.id) }) { planLink = nil }
         }
         .task {
             if session.isNew, let initialPrompt, !didSendInitial {
@@ -227,40 +215,37 @@ struct ConversationView: View {
     /// The conversation's title, with the agent that answers in it on a
     /// second, quieter line — where the composer's runtime chip used to be.
     private var titleBar: some View {
-        VStack(spacing: 1) {
-            Text(session.title)
-                .font(Theme.Text.label.weight(.semibold))
-                .foregroundStyle(Theme.heading)
-                .lineLimit(1)
-            if let name = session.runtimeDisplayName {
-                HStack(spacing: 4) {
-                    RuntimeMark(runtime: session.isNativeRuntime ? session.agentRuntime : nil)
-                    Text(name)
-                        .font(Theme.Text.micro)
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
+        HStack(spacing: 8) {
+            AgentAvatar(agentId: session.sessionId, runtime: session.agentRuntime)
+            VStack(spacing: 1) {
+                Text(session.title)
+                    .font(Theme.Text.label.weight(.semibold))
+                    .foregroundStyle(Theme.heading)
+                    .lineLimit(1)
+                if let name = session.runtimeDisplayName {
+                    HStack(spacing: 4) {
+                        RuntimeMark(runtime: session.isNativeRuntime ? session.agentRuntime : nil)
+                        Text(name)
+                            .font(Theme.Text.micro)
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Runtime: \(name)")
+                } else if !session.loaded {
+                    Text(" ").font(Theme.Text.micro).accessibilityHidden(true)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Runtime: \(name)")
-            } else if !session.loaded {
-                // A chat opened without the list's copy of the runtime — from
-                // a plan, say — holds the line rather than growing into it
-                // once the detail lands.
-                Text(" ").font(Theme.Text.micro).accessibilityHidden(true)
             }
         }
     }
 
-    /// Plan links open the plan here and session links open that chat the
-    /// way a tapped notification does; everything else leaves the app.
+    /// Plan links open the plan here, approved through this chat; other app
+    /// pages open the way a link from outside does; everything else leaves.
     private func open(link url: URL) {
-        if let target = PlanLink.target(in: url) {
-            planLink = target
-        } else if let link = SessionLink.target(in: url) {
-            guard link.sessionId != session.sessionId else { return }
-            PushNotifications.shared.pendingTarget = PushTarget(teamId: link.teamId, sessionId: link.sessionId)
-        } else {
-            openURL(url)
+        switch AppLink(url) {
+        case .plan(let target): planLink = target
+        case .session(_, session.sessionId): break
+        default: if !PushNotifications.shared.open(url) { openURL(url) }
         }
     }
 
@@ -367,12 +352,16 @@ struct ConversationView: View {
         case .reasoning(_, let part):
             ReasoningTile(part: part)
         case .tool(_, _, let part, let canDecide):
-            ToolCallRow(
-                part: part,
-                canDecide: canDecide,
-                session: session,
-                onOpen: { toolDetail = part }
-            )
+            if let reference = ThreadReference(part) {
+                AgentThreadBadge(reference: reference, teamId: session.teamId, agents: referencedAgents, onLink: open(link:))
+            } else {
+                ToolCallRow(
+                    part: part,
+                    canDecide: canDecide,
+                    session: session,
+                    onOpen: { toolDetail = part }
+                )
+            }
         case .toolRun(_, _, let items, let live):
             ToolRunView(items: items, live: live, session: session, onOpen: { toolDetail = $0 })
         case .work(_, let inner, let duration):
@@ -569,18 +558,26 @@ struct EventLine: View {
             Button {
                 disclose(readingInteraction) { expanded.toggle() }
             } label: {
-                HStack(spacing: 5) {
-                    if let logo = event.logo {
-                        BrandLogo(name: logo, size: 13).foregroundStyle(Theme.heading)
+                HStack(spacing: event.agentId == nil ? 5 : 8) {
+                    if let agentId = event.agentId {
+                        AgentAvatar(agentId: agentId, runtime: event.runtime)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(event.name).fontWeight(.medium).foregroundStyle(Theme.heading)
+                            Text(event.text.prefix { $0 != "\n" })
+                        }
                     } else {
-                        Text(event.name.prefix(1).uppercased())
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 14, height: 14)
-                            .background(Theme.muted, in: Circle())
+                        if let logo = event.logo {
+                            BrandLogo(name: logo, size: 13).foregroundStyle(Theme.heading)
+                        } else {
+                            Text(event.name.prefix(1).uppercased())
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 14, height: 14)
+                                .background(Theme.muted, in: Circle())
+                        }
+                        Text(event.name).fontWeight(.medium).foregroundStyle(Theme.heading).layoutPriority(1)
+                        Text(event.text.prefix { $0 != "\n" })
                     }
-                    Text(event.name).fontWeight(.medium).foregroundStyle(Theme.heading).layoutPriority(1)
-                    Text(event.text.prefix { $0 != "\n" })
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(expanded ? 90 : 0))
