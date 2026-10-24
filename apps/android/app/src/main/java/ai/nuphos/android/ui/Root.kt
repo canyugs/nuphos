@@ -73,8 +73,8 @@ internal fun SignedInHost(user: NuphosUser, token: String, agentFactory: (String
     val context = LocalContext.current.applicationContext
     val agent = remember(token, AiAccess.revision) { agentFactory(token, context) }
     LaunchedEffect(agent.teamsPhase, agent.teams) {
-        if (agent.teamsPhase == AgentStore.Phase.Loaded) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
-            (context as ai.nuphos.android.NuphosApplication).incomingShares.pruneTeams(agent.teams.map { it.id }.toSet())
+        if (agent.teamsPhase == AgentStore.Phase.Loaded && AiAccess.bind(token)()) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+            (context as ai.nuphos.android.NuphosApplication).incomingShares.pruneTeams(user.id, agent.teams.map { it.id }.toSet())
         }
     }
     val plans = remember(token) { PlansStore(token) }

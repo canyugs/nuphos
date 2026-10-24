@@ -55,6 +55,12 @@ class IncomingShares(
     private val optimistic = ConcurrentHashMap<ComposerDrafts.Key, Edit>()
     private val clearing = ConcurrentHashMap<ComposerDrafts.Key, Long>()
     private var actorIdentity = 0L // IO actor only
+    private var identityFailure: Throwable? = null
+    private var cancelFailure: Throwable? = null
+    private var cancelFailureId: Long? = null
+    private fun retireObsoleteCancel(box: IncomingShareMailbox) {
+        if (cancelFailure != null && box.state.value?.id != cancelFailureId) { cancelFailure = null; cancelFailureId = null }
+    }
     @Volatile private var view = IncomingShareView()
     @Volatile private var viewIdentity = -1L
     private val mutable = MutableStateFlow<Pending?>(null)
@@ -153,16 +159,18 @@ class IncomingShares(
 
     /** No disk access, serialization or flush occurs in the input callback. At most one trailing edit is queued. */
     fun writeText(key: ComposerDrafts.Key, value: String) {
+        val epoch = viewIdentity
+        val version = keyVersions[key].orZero()
         if (!isBound(key.accountId) || !hasDraft(key) || clearing.containsKey(key)) return
         require(value.length <= ai.nuphos.android.data.IncomingShareIntents.MAX_TEXT)
-        val edit = Edit(key, value, identity.get(), keyVersions[key].orZero())
+        val edit = Edit(key, value, epoch, version)
         optimistic[key] = edit
         synchronized(queueLock) {
             val tail = tailEdit
             if (tail != null && !tail.started && tail.edit.key == key) tail.edit = edit
             else {
                 val next = EditWork(edit) { captured, box ->
-                    if (captured.identity == identity.get() && captured.keyVersion == keyVersions[captured.key].orZero()) {
+                    if (captured.identity == identity.get() && captured.identity == actorIdentity && captured.keyVersion == keyVersions[captured.key].orZero()) {
                         try {
                             box.writeText(captured.key, captured.text)
                             publish(box)
@@ -172,7 +180,7 @@ class IncomingShares(
                                 mutableRevision.value++
                             }
                         } finally { publish(box) }
-                    }
+                    } else optimistic.remove(captured.key, captured)
                 }
                 tailEdit = next
                 check(queue.trySend(next).isSuccess)
@@ -180,8 +188,9 @@ class IncomingShares(
         }
     }
     internal fun close() { queue.close(); scope.cancel(); uiScope.cancel() }
-    suspend fun awaitIdle() { enqueue { }.await() }
+    suspend fun awaitIdle() { enqueue { identityFailure?.let { throw it }; cancelFailure?.let { throw it } }.await() }
     suspend fun checkWritable(key: ComposerDrafts.Key) = enqueue { box ->
+        check(actorIdentity == identity.get()) { "Identity cleanup is pending." }
         val retry = optimistic[key]?.takeIf { it.identity == identity.get() && it.keyVersion == keyVersions[key].orZero() }
         if (retry != null) box.writeText(key, retry.text)
         box.checkWritable(key)
@@ -194,7 +203,7 @@ class IncomingShares(
     suspend fun begin(accountId: String?): Long? {
         if (state.value != null || !importStarting.compareAndSet(false, true)) return null
         val epoch = identity.get()
-        return try { enqueue { if (epoch == identity.get()) it.begin(accountId) else null }.await() }
+        return try { enqueue { if (epoch == identity.get() && actorIdentity == epoch) it.begin(accountId) else null }.await() }
         finally { importStarting.set(false) }
     }
     suspend fun remainingBytes() = enqueue { it.remainingBytes() }.await()
@@ -204,38 +213,63 @@ class IncomingShares(
     suspend fun loaded(id: Long, text: String, files: List<ComposerAttachment>): Boolean {
         val epoch = identity.get()
         return enqueue {
-            if (epoch == identity.get()) it.loaded(id, text, files)
+            if (epoch == identity.get() && actorIdentity == epoch) it.loaded(id, text, files)
             else { files.forEach { file -> file.releaseOwnedCopy() }; false }
         }.await()
     }
     fun failed(id: Long, error: String) { enqueue { it.failed(id, error) } }
     suspend fun bindAccount(accountId: String) {
         val epoch = identity.get()
-        enqueue { if (epoch == identity.get()) it.bindAccount(accountId) }.await()
+        try {
+            enqueue { box ->
+                if (epoch == identity.get()) {
+                    retireObsoleteCancel(box)
+                    if (cancelFailure != null) { box.cancel(); cancelFailure = null; cancelFailureId = null }
+                    if (actorIdentity != epoch || identityFailure != null) {
+                        box.identityReset(); actorIdentity = epoch; identityFailure = null
+                    }
+                    box.bindAccount(accountId)
+                }
+            }.await()
+        } catch (failure: Throwable) {
+            if (failure is CancellationException) throw failure
+            // Storage errors are exposed through persistenceError; keep the composer gated rather than crashing Root.
+        }
     }
     suspend fun choose(id: Long, key: ComposerDrafts.Key): Boolean {
         val epoch = identity.get()
-        return enqueue { epoch == identity.get() && it.choose(id, key) }.await()
+        return enqueue { epoch == identity.get() && actorIdentity == epoch && it.choose(id, key) }.await()
     }
     suspend fun consumed(id: Long, key: ComposerDrafts.Key, mergedText: String = "", combined: List<ComposerAttachment>? = null, onCommitted: () -> Unit = {}): Boolean {
         val epoch = identity.get()
         return enqueue { box ->
-            val accepted = epoch == identity.get() && box.consumed(id, key, mergedText, combined)
+            val accepted = epoch == identity.get() && actorIdentity == epoch && box.consumed(id, key, mergedText, combined)
             if (accepted) publish(box) { if (epoch == identity.get()) onCommitted() }
             accepted
         }.await()
     }
-    fun cancel() {
+    fun cancel(id: Long? = null) {
+        if (id != null && state.value?.id != id) return
         if (!cancelQueued.compareAndSet(false, true)) return
-        enqueue { try { it.cancel() } finally { cancelQueued.set(false) } }
+        enqueue {
+            val target = id ?: it.state.value?.id
+            try { if (id == null || it.state.value?.id == id) it.cancel(); cancelFailure = null; cancelFailureId = null }
+            catch (failure: Throwable) { cancelFailure = failure; cancelFailureId = target; throw failure }
+            finally { cancelQueued.set(false) }
+        }
     }
-    fun identityReset() {
+    fun identityReset() = synchronized(queueLock) {
+        // Publish the epoch and enqueue its reset atomically with respect to new bind/edit requests.
         val epoch = identity.incrementAndGet()
-        optimistic.clear()
-        clearing.clear()
-        keyVersions.clear()
+        optimistic.clear(); clearing.clear(); keyVersions.clear()
         uiScope.launch { mutable.value = mutable.value?.takeIf { it.accountId == null }; mutableRevision.value++ }
-        enqueue { it.identityReset(); actorIdentity = epoch }
+        enqueue {
+            if (epoch == identity.get()) {
+                try { it.identityReset(); actorIdentity = epoch; identityFailure = null; retireObsoleteCancel(it) }
+                catch (failure: Throwable) { identityFailure = failure; throw failure }
+            }
+        }
+        Unit
     }
     suspend fun forgetAttachment(key: ComposerDrafts.Key, id: String) = enqueue { it.forgetAttachment(key, id) }.await()
     suspend fun sent(key: ComposerDrafts.Key, files: List<ComposerAttachment> = emptyList()) {
@@ -248,9 +282,11 @@ class IncomingShares(
         enqueue { it.drop(key) }.await()
         finishClear(key, version)
     }
-    suspend fun pruneTeams(allowed: Set<String>) {
-        val removed = view.texts.keys.filter { it.teamId !in allowed }.associateWith(::invalidate)
-        enqueue { it.pruneTeams(allowed) }.await()
+    suspend fun pruneTeams(accountId: String, allowed: Set<String>) {
+        if (!isBound(accountId)) return
+        val epoch = viewIdentity
+        val removed = view.texts.keys.filter { it.accountId == accountId && it.teamId !in allowed }.associateWith(::invalidate)
+        enqueue { if (epoch == identity.get() && actorIdentity == epoch) it.pruneTeams(allowed) }.await()
         removed.forEach { (key, version) -> finishClear(key, version) }
     }
     suspend fun handoff(files: List<ComposerAttachment>) = enqueue { it.handoff(files) }.await()

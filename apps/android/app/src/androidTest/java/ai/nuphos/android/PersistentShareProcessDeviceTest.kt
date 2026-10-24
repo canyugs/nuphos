@@ -145,6 +145,7 @@ class PersistentShareProcessDeviceTest {
             ConnectorIntents.callback.value = null
             auth = AuthSession(app, app.tokenStore)
             auth.onIdentityReset = originalAuth.onIdentityReset
+            auth.awaitIdentityCleanup = originalAuth.awaitIdentityCleanup
             NuphosApplication::class.java.getDeclaredField("authSession").also { it.isAccessible = true }.set(app, auth)
             app.getSharedPreferences("nuphos.prefs", Context.MODE_PRIVATE).edit()
                 .putString("nuphos.workspace.lastTeamId", a).commit()
@@ -301,6 +302,7 @@ class PersistentShareProcessDeviceTest {
                 assertFiles(key())
                 sender("text")
                 compose.onNodeWithText("Cancel share").performClick()
+                compose.waitUntil(15_000) { app.incomingShares.state.value == null }
                 assertNull(app.incomingShares.state.value)
                 awaitText("Edited persisted synthetic draft")
                 assertFiles(key())
@@ -335,6 +337,7 @@ class PersistentShareProcessDeviceTest {
                 open()
                 awaitText("Cancel share")
                 compose.onNodeWithText("Cancel share").performClick()
+                compose.waitUntil(15_000) { app.incomingShares.state.value == null }
                 assertNull(app.incomingShares.state.value)
             }
             "verifyCanceled" -> {

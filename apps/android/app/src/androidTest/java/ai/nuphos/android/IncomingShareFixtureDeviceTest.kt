@@ -224,7 +224,10 @@ class IncomingShareFixtureDeviceTest {
     }
     @Test fun crossUidMultipleFilesReachExistingDraftWithoutSendingAndSurviveRotation() {
         identity()
+        kotlinx.coroutines.runBlocking { app.incomingShares.bindAccount(NuphosUser.preview.id) }
         instrumentation.runOnMainSync {
+            app.incomingShares.writeText(ai.nuphos.android.session.ComposerDrafts.Key(NuphosUser.preview.id, a,
+                ai.nuphos.android.session.ComposerDrafts.Destination.Chat("fixture-chat")), "Existing synthetic draft")
             app.authSession.composerDrafts.onIdentity(NuphosUser.preview.id)
             app.authSession.composerDrafts.bind(NuphosUser.preview.id, a,
                 ai.nuphos.android.session.ComposerDrafts.Destination.Chat("fixture-chat"))!!.write("Existing synthetic draft")
@@ -258,6 +261,7 @@ class IncomingShareFixtureDeviceTest {
         identity()
         sender("text")
         compose.onNodeWithText("Cancel share").performClick()
+                compose.waitUntil(15_000) { app.incomingShares.state.value == null }
         assertNull(app.incomingShares.state.value)
         sender("text")
         awaitText("New agent draft")
@@ -274,6 +278,7 @@ class IncomingShareFixtureDeviceTest {
             assertNotNull(app.incomingShares.state.value?.error)
             assertTrue(app.incomingShares.state.value!!.attachments.isEmpty())
             compose.onNodeWithText("Cancel share").performClick()
+                compose.waitUntil(15_000) { app.incomingShares.state.value == null }
             assertNull(app.incomingShares.state.value)
         }
         assertEquals(0, requests.count { it.method != "GET" })

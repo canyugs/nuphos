@@ -539,6 +539,9 @@ never across a consumption/deletion/identity barrier. Consumption and send prefl
 wait for durable IO before updating the composer or accepting submission. Pending
 cancellation is acknowledged after its ordered deletion; identity changes immediately
 hide the previous account while its IO cleanup remains ordered ahead of any new bind.
+Logout acknowledges completion only after that cleanup barrier succeeds; a failed
+fire-and-forget cleanup is reported by the barrier and retried before a new bind.
+Workspace pruning and pending cancellation carry their original account/share scope.
 If a write fails, unsaved text remains visible with an error and Send retries that
 value before handoff. Startup also retires already-loaded in-memory legacy text on
 Main before exposing the restored projection. Ordinary picker attachments
