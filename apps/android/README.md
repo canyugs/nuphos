@@ -587,3 +587,25 @@ The driver force-stops only the named persistence receiver/sender, checks they
 have no process, requires a new recorded PID per phase, and stops on the first
 failed instrumentation result. It does not install, uninstall, clear app data,
 change accessibility settings, or start a real backend message.
+
+### Conversation row actions fixture
+
+Conversation rows expose actions through a 48dp More button, long press, and a
+swipe-to-reveal rail. A full swipe only reveals buttons; it never changes a chat.
+Back, an outside tap, scrolling, reordering, or switching workspaces closes the
+rail. Watch and Unlink retain their permission, busy, error, and confirmation
+rules. Pin and Archive read fresh conversation metadata before writing, without
+opening the chat or resuming its active turn. Archive requires confirmation.
+
+For narrow rows or large fonts, the rail shows two actions and More; the menu
+always contains every available action. TalkBack custom actions provide the same
+operations without a swipe. Horizontal reveal follows layout direction.
+
+Build a separate installation using `-PnuphosIsolatedRowActionsFixture=true`
+(`ai.nuphos.android.rowactions1357`), then run
+`ConversationRowActionsFixtureDeviceTest`, `ConversationUnlinkFixtureDeviceTest`,
+`ConversationWatchFixtureDeviceTest`, and `ConversationNestingFixtureDeviceTest`.
+The row fixture renders synthetic Compose content only. It checks real click,
+long press, full swipe, Back, outside tap, disabled actions, RTL/large text, and
+accessibility actions. Its screenshots are `row-actions-*.png` in the fixture
+app's external files directory. Never install it over the Play application.
