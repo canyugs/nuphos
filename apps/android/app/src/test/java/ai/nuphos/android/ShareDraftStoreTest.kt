@@ -1,5 +1,7 @@
 package ai.nuphos.android
 
+import ai.nuphos.android.session.IncomingShareMailbox as IncomingShares
+
 import ai.nuphos.android.data.*
 import ai.nuphos.android.model.ComposerAttachment
 import ai.nuphos.android.session.*

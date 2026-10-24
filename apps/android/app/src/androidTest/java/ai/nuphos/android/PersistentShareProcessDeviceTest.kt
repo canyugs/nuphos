@@ -76,7 +76,11 @@ class PersistentShareProcessDeviceTest {
         (field.get(auth) as MutableState<AuthSession.State>).value = value
     }
 
-    private fun identity() = instrumentation.runOnMainSync {
+    private fun onMain(block: suspend () -> Unit) = kotlinx.coroutines.runBlocking {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) { block() }
+    }
+
+    private fun identity() = onMain {
         AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(auth, token)
         AiAccess.activate(token)
         AiAccess.grant(token)
@@ -136,7 +140,7 @@ class PersistentShareProcessDeviceTest {
             originals[name] = field.get(null) as OkHttpClient
             field.set(null, client)
         }
-        instrumentation.runOnMainSync {
+        onMain {
             app.conversationLinks.value.value?.let(app.conversationLinks::complete)
             ConnectorIntents.callback.value = null
             auth = AuthSession(app, app.tokenStore)
@@ -153,16 +157,16 @@ class PersistentShareProcessDeviceTest {
             val callback = androidx.test.runner.lifecycle.ActivityLifecycleCallback { current, stage ->
                 if (current === target && stage == Stage.DESTROYED) destroyed.countDown()
             }
-            instrumentation.runOnMainSync {
+            onMain {
                 val monitor = ActivityLifecycleMonitorRegistry.getInstance()
                 monitor.addLifecycleCallback(callback)
                 if (monitor.getLifecycleStageOf(target) == Stage.DESTROYED) destroyed.countDown()
                 else target.finish()
             }
             assertTrue("Fixture Activity did not close", destroyed.await(5, TimeUnit.SECONDS))
-            instrumentation.runOnMainSync { ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback) }
+            onMain { ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback) }
         }
-        if (::auth.isInitialized) instrumentation.runOnMainSync {
+        if (::auth.isInitialized) onMain {
             (AuthSession::class.java.getDeclaredField("scope").also { it.isAccessible = true }.get(auth) as CoroutineScope).cancel()
             val callback = AiAccess.onRevoked
             AiAccess.onRevoked = {}
@@ -182,7 +186,7 @@ class PersistentShareProcessDeviceTest {
             .putExtra("fixtureMode", mode).putExtra("fixtureReceipt", receipt).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         compose.waitUntil(10_000) {
             var ready = false
-            instrumentation.runOnMainSync {
+            onMain {
                 activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>().firstOrNull()
                 val pending = app.incomingShares.state.value
                 ready = activity != null && if (mode == "revoke") activity?.intent?.getStringExtra("fixtureReceipt") == receipt
@@ -202,7 +206,7 @@ class PersistentShareProcessDeviceTest {
                 resumed.countDown()
             }
         }
-        instrumentation.runOnMainSync {
+        onMain {
             ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(callback)
             old.recreate()
         }
@@ -211,7 +215,7 @@ class PersistentShareProcessDeviceTest {
             activity = replacement
             compose.waitForIdle()
         } finally {
-            instrumentation.runOnMainSync { ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback) }
+            onMain { ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(callback) }
         }
     }
     private fun awaitText(value: String) {
@@ -247,11 +251,11 @@ class PersistentShareProcessDeviceTest {
         val previousPid = markers.getInt("previousPid", -1)
         assertNotEquals("Run each phase in a genuinely new target process", previousPid, android.os.Process.myPid())
         identity()
-        instrumentation.runOnMainSync { auth.composerDrafts.onIdentity(NuphosUser.preview.id) }
+        onMain { auth.composerDrafts.onIdentity(NuphosUser.preview.id) }
         when (phase) {
             "seedPending" -> {
-                instrumentation.runOnMainSync {
-                    app.incomingShares.identityReset(); app.incomingShares.cancel()
+                onMain {
+                    app.incomingShares.identityReset(); app.incomingShares.cancel(); app.incomingShares.awaitIdle()
                     auth.composerDrafts.clear()
                     app.incomingShares.bindAccount(NuphosUser.preview.id)
                     // Match ChatComposer.updateText: a deliberate new edit replaces any old cleanup guard first.
@@ -316,7 +320,7 @@ class PersistentShareProcessDeviceTest {
                 assertFiles(newKey())
                 snapshot("persistent-new-after-restart")
                 // Simulate the composer's accepted local submission boundary; no backend message is sent.
-                instrumentation.runOnMainSync {
+                onMain {
                     app.incomingShares.sent(newKey())
                     auth.composerDrafts.bind(NuphosUser.preview.id, a, newKey().destination)!!.submitted(true, sharedText)
                 }
@@ -340,7 +344,7 @@ class PersistentShareProcessDeviceTest {
             }
             "switchAccount" -> {
                 open()
-                instrumentation.runOnMainSync {
+                onMain {
                     val otherToken = "other-synthetic-no-credentials"
                     AuthSession::class.java.getDeclaredField("token").also { it.isAccessible = true }.set(auth, otherToken)
                     AiAccess.activate(otherToken); AiAccess.grant(otherToken)
@@ -348,6 +352,7 @@ class PersistentShareProcessDeviceTest {
                     setState(AuthSession.State.SignedIn(NuphosUser.preview.copy(id = "other-synthetic-account")))
                 }
                 compose.waitUntil(15_000) { app.incomingShares.state.value == null }
+                kotlinx.coroutines.runBlocking { app.incomingShares.awaitIdle() }
                 assertNull(app.incomingShares.state.value)
                 assertTrue(app.shareDraftStore.load().drafts.isEmpty())
                 assertTrue(app.shareDraftStore.load().pending == null)
@@ -361,19 +366,21 @@ class PersistentShareProcessDeviceTest {
             }
             "signOut" -> {
                 open()
-                instrumentation.runOnMainSync { auth.signOut() }
+                onMain { auth.signOut() }
+                kotlinx.coroutines.runBlocking { app.incomingShares.awaitIdle() }
                 assertNull(app.incomingShares.state.value)
                 assertTrue(app.shareDraftStore.load().drafts.isEmpty())
             }
             "consentReset" -> {
-                instrumentation.runOnMainSync { AiAccess.revoke() }
+                onMain { AiAccess.revoke() }
+                kotlinx.coroutines.runBlocking { app.incomingShares.awaitIdle() }
                 assertNull(app.incomingShares.state.value)
                 assertTrue(app.shareDraftStore.load().drafts.isEmpty())
             }
             "damageDeliveredMetadata", "removeDeliveredFile" -> {
-                instrumentation.runOnMainSync { app.incomingShares.bindAccount(NuphosUser.preview.id) }
+                onMain { app.incomingShares.bindAccount(NuphosUser.preview.id) }
                 assertFiles(key())
-                instrumentation.runOnMainSync {
+                onMain {
                     auth.composerDrafts.bind(NuphosUser.preview.id, a, key().destination)!!.write("Stale shared preference must never return")
                     auth.composerDrafts.bind(NuphosUser.preview.id, a, ordinaryKey().destination)!!.write("Unrelated ordinary draft survives")
                     assertTrue(app.getSharedPreferences("nuphos.composer-drafts", Context.MODE_PRIVATE).edit().commit())
@@ -383,7 +390,7 @@ class PersistentShareProcessDeviceTest {
             }
             "verifyDeliveredCorrupt" -> {
                 assertNull(app.incomingShares.state.value)
-                instrumentation.runOnMainSync {
+                onMain {
                     assertEquals("", app.incomingShares.text(key()) ?: auth.composerDrafts.bind(NuphosUser.preview.id, a, key().destination)!!.text)
                     assertEquals("Unrelated ordinary draft survives", auth.composerDrafts.bind(NuphosUser.preview.id, a, ordinaryKey().destination)!!.text)
                 }
@@ -405,10 +412,10 @@ class PersistentShareProcessDeviceTest {
                 open()
             }
             "seedLegacy" -> {
-                instrumentation.runOnMainSync { app.incomingShares.identityReset(); app.incomingShares.cancel() }
+                onMain { app.incomingShares.identityReset(); app.incomingShares.cancel(); app.incomingShares.awaitIdle() }
                 java.io.File(app.filesDir, "incoming-share-attachments").mkdirs()
                 java.io.File(app.filesDir, "incoming-share-attachments/legacy.upload").writeText("legacy synthetic")
-                instrumentation.runOnMainSync {
+                onMain {
                     app.incomingShares.bindAccount(NuphosUser.preview.id)
                     app.incomingShares.writeText(newKey(), "Legacy synthetic text draft")
                     auth.composerDrafts.bind(NuphosUser.preview.id, a, newKey().destination)!!.write("Legacy synthetic text draft")
@@ -430,6 +437,7 @@ class PersistentShareProcessDeviceTest {
             }
             else -> error("Unknown phase $phase")
         }
+        kotlinx.coroutines.runBlocking { app.incomingShares.awaitIdle() }
         assertTrue("Unexpected writes: $requests", requests.all { it.method == "GET" })
         assertTrue(markers.edit().putInt("previousPid", android.os.Process.myPid()).commit())
         instrumentation.sendStatus(2, android.os.Bundle().apply {

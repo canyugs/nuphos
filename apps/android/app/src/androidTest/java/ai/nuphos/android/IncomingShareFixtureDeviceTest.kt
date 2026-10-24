@@ -133,6 +133,7 @@ class IncomingShareFixtureDeviceTest {
             originals[name] = field.get(null) as OkHttpClient
             field.set(null, client)
         }
+        kotlinx.coroutines.runBlocking { app.incomingShares.awaitIdle() }
         instrumentation.runOnMainSync {
             app.incomingShares.cancel()
             app.conversationLinks.value.value?.let(app.conversationLinks::complete)
@@ -168,6 +169,7 @@ class IncomingShareFixtureDeviceTest {
             app.incomingShares.cancel()
             app.conversationLinks.value.value?.let(app.conversationLinks::complete)
         }
+        if (::app.isInitialized) kotlinx.coroutines.runBlocking { app.incomingShares.awaitIdle() }
         originals.forEach { (name, client) -> Http::class.java.getDeclaredField(name).also { it.isAccessible = true }.set(null, client) }
         if (::app.isInitialized) assertNull("Fixture persisted an account", app.tokenStore.read())
         assertTrue("Unexpected requests: $unexpected", unexpected.isEmpty())

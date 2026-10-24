@@ -532,7 +532,16 @@ then be discarded too. Import/edit failures retain the prior committed snapshot.
 After restart a pending share requires explicit destination selection again and
 fresh access checks. Already imported text and attachments are one transaction:
 a crash before updating older text preferences cannot append the share twice.
-Subsequent edits update that shared draft journal. Ordinary picker attachments
+Subsequent edits update that shared draft journal. A single IO actor owns journal,
+authority and legacy-preference IO; UI callbacks read immutable projections.
+Typing updates an optimistic in-memory value and coalesces only the trailing edit,
+never across a consumption/deletion/identity barrier. Consumption and send preflight
+wait for durable IO before updating the composer or accepting submission. Pending
+cancellation is acknowledged after its ordered deletion; identity changes immediately
+hide the previous account while its IO cleanup remains ordered ahead of any new bind.
+If a write fails, unsaved text remains visible with an error and Send retries that
+value before handoff. Startup also retires already-loaded in-memory legacy text on
+Main before exposing the restored projection. Ordinary picker attachments
 remain temporary until they are merged with a system share, when the whole
 combined attachment draft is retained. Selecting another workspace never moves
 content between draft keys. Membership removal, denied/read-only/archived agent

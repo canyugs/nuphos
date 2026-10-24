@@ -25,11 +25,12 @@ class NuphosApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         // One-time cleanup of the legacy process-local layout; it had no recoverable metadata.
-        java.io.File(filesDir, "incoming-share-attachments").deleteRecursively()
         val legacyDraftText = ai.nuphos.android.data.ComposerDraftPreferences(this)
         shareDraftStore = ai.nuphos.android.data.ShareDraftStore(java.io.File(noBackupFilesDir, "share-drafts-v1"),
             discardLegacyText = legacyDraftText::erase)
-        incomingShares = ai.nuphos.android.session.IncomingShares(shareDraftStore)
+        incomingShares = ai.nuphos.android.session.IncomingShares(shareDraftStore,
+            beforeLoad = { java.io.File(filesDir, "incoming-share-attachments").deleteRecursively() },
+            onLegacyErased = { keys -> if (::authSession.isInitialized) authSession.composerDrafts.eraseMemory(keys) })
         tokenStore = TokenStore(this)
         authSession = AuthSession(this, tokenStore)
         localNotifications = ai.nuphos.android.notifications.LocalNotifications(this, { authSession.user?.id }, { authSession.aiAllowed })

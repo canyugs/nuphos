@@ -3,9 +3,7 @@ package ai.nuphos.android.data
 import ai.nuphos.android.model.ComposerAttachment
 import ai.nuphos.android.session.ComposerDrafts
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.UUID
 import kotlinx.serialization.Serializable
@@ -16,6 +14,7 @@ import kotlinx.serialization.json.Json
 class ShareDraftStore(
     private val directory: File,
     private val discardLegacyText: (Set<ComposerDrafts.Key>) -> Boolean = { true },
+    private val fileWriter: ShareDraftWriter = AtomicShareDraftWriter,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     companion object {
@@ -43,6 +42,11 @@ class ShareDraftStore(
     private val metadata = File(directory, "state.json")
     private val json = Json { ignoreUnknownKeys = false; encodeDefaults = true }
     private var previous = Snapshot()
+    private val erasedLegacy = mutableSetOf<ComposerDrafts.Key>()
+    private fun discardLegacy(keys: Set<ComposerDrafts.Key>): Boolean = runCatching {
+        discardLegacyText(keys).also { if (it) erasedLegacy.addAll(keys) }
+    }.getOrDefault(false)
+    @Synchronized internal fun takeErasedLegacy(): Set<ComposerDrafts.Key> = erasedLegacy.toSet().also { erasedLegacy.clear() }
     private val blobName = Regex("attachment-[A-Za-z0-9_-]+\\.upload")
 
     private fun checkedFile(blob: Blob): File {
@@ -78,14 +82,7 @@ class ShareDraftStore(
     }
     private fun authorityName(address: Address) = MessageDigest.getInstance("SHA-256")
         .digest(json.encodeToString(address).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) } + ".json"
-    private fun atomicWrite(target: File, bytes: ByteArray) {
-        val next = File(target.parentFile, target.name.removeSuffix(".json") + ".next")
-        try {
-            require(!Files.isSymbolicLink(target.toPath()) && !Files.isSymbolicLink(next.toPath()) && !next.isDirectory)
-            FileOutputStream(next).use { it.write(bytes); it.fd.sync() }
-            Files.move(next.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } finally { next.delete() }
-    }
+    private fun atomicWrite(target: File, bytes: ByteArray) = fileWriter.replace(target, bytes)
     private fun ensureGuard(address: Address, epoch: String, revision: Long) {
         if (address.key() in guards) return
         require(!unsafeAuthorities && !Files.isSymbolicLink(authorities.toPath()))
@@ -123,6 +120,8 @@ class ShareDraftStore(
     }
     private fun isPrepared(guard: Authority) = guard.epoch == previous.epoch && guard.revision > previous.revision &&
         previous.drafts.none { it.address == guard.address }
+    @Synchronized internal fun legacyKeys() = guards.filterValues { !isPrepared(it) }.keys.toSet()
+    @Synchronized internal fun suppressesAllLegacy() = unsafeAuthorities
     @Synchronized fun suppressesLegacyText(key: ComposerDrafts.Key) = unsafeAuthorities || guards[key]?.let { !isPrepared(it) } == true
     @Synchronized fun load(): Snapshot {
         readGuards()
@@ -144,7 +143,7 @@ class ShareDraftStore(
         }.forEach { retireGuard(it.address.key()) } // Prepared but never published: preserve the ordinary draft.
         val cutoff = now() - RETENTION_MS
         val expired = loaded.drafts.filter { it.updated <= cutoff }
-        val clearedText = expired.isEmpty() || runCatching { discardLegacyText(expired.map { it.address.key() }.toSet()) }.getOrDefault(false)
+        val clearedText = expired.isEmpty() || discardLegacy(expired.map { it.address.key() }.toSet())
         val current = loaded.copy(pending = loaded.pending?.takeIf { it.updated > cutoff },
             drafts = loaded.drafts.mapNotNull {
                 if (it.updated > cutoff) it
@@ -156,7 +155,7 @@ class ShareDraftStore(
         if (current != loaded) runCatching { commit(current) }.onFailure { metadata.delete() }
         val active = current.drafts.map { it.address.key() }.toSet()
         guards.keys.toList().filter { it !in active && guards[it]?.let(::isPrepared) != true }.forEach { key ->
-            if (runCatching { discardLegacyText(setOf(key)) }.getOrDefault(false)) retireGuard(key)
+            if (discardLegacy(setOf(key))) retireGuard(key)
         }
         cleanOrphans(current)
         return current
@@ -206,7 +205,7 @@ class ShareDraftStore(
     }
     fun eraseLegacyText(keys: Set<ComposerDrafts.Key>) {
         // The journal tombstone is already committed. On failure, expiry retries before retiring it.
-        runCatching { discardLegacyText(keys) }
+        discardLegacy(keys)
     }
     fun usedBytes(): Long {
         if (Files.isSymbolicLink(directory.toPath()) || Files.isSymbolicLink(assets.toPath())) return AttachmentTransfers.MAX_TOTAL_BYTES

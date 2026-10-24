@@ -2,11 +2,31 @@ package ai.nuphos.android.session
 
 import ai.nuphos.android.data.ShareDraftStore
 import ai.nuphos.android.model.ComposerAttachment
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Main-thread mailbox. The journal is authoritative for shared text + attachments as one transaction. */
-class IncomingShares(private val disk: ShareDraftStore? = null, private val now: () -> Long = System::currentTimeMillis) {
+internal data class IncomingShareView(
+    val account: String? = null,
+    val texts: Map<ComposerDrafts.Key, String> = emptyMap(),
+    val files: Map<ComposerDrafts.Key, List<ComposerAttachment>> = emptyMap(),
+    val legacy: Set<ComposerDrafts.Key> = emptySet(),
+    val suppressAll: Boolean = false,
+)
+
+/** All journal/guard/file operations belong to one IO actor. UI getters only read immutable projections. */
+class IncomingShares(
+    disk: ShareDraftStore? = null,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val uiDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    beforeLoad: () -> Unit = {},
+    private val onLegacyErased: (Set<ComposerDrafts.Key>) -> Unit = {},
+    now: () -> Long = System::currentTimeMillis,
+) {
     data class Pending(
         val id: Long,
         val accountId: String?,
@@ -16,141 +36,224 @@ class IncomingShares(private val disk: ShareDraftStore? = null, private val now:
         val error: String? = null,
         val destination: ComposerDrafts.Key? = null,
     )
-    private var journal = disk?.load() ?: ShareDraftStore.Snapshot()
-    private var account: String? = null
-    private val delivered = mutableMapOf<ComposerDrafts.Key, List<ComposerAttachment>>()
-    private var sequence = maxOf(now(), journal.pending?.id ?: 0L)
-    private val mutable = MutableStateFlow(journal.pending?.let {
-        // A choice interrupted before consumption must be explicitly selected and authorized again.
-        Pending(it.id, it.account, it.text, disk?.restore(it.blobs).orEmpty(), loading = false)
-    })
+    private data class Edit(val key: ComposerDrafts.Key, val text: String, val identity: Long, val keyVersion: Long)
+    private interface Work { suspend fun run(box: IncomingShareMailbox); fun fail(error: Throwable) {} }
+    private class EditWork(var edit: Edit, var started: Boolean = false, val execute: suspend (Edit, IncomingShareMailbox) -> Unit) : Work {
+        override suspend fun run(box: IncomingShareMailbox) = execute(edit, box)
+    }
+    private val queue = Channel<Work>(Channel.UNLIMITED)
+    private val queueLock = Any()
+    private var tailEdit: EditWork? = null
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val uiScope = CoroutineScope(SupervisorJob() + uiDispatcher)
+    private val identity = AtomicLong()
+    private val keySequence = AtomicLong()
+    private val importStarting = AtomicBoolean()
+    private val cancelQueued = AtomicBoolean()
+    private val diskForStaging = disk
+    private val keyVersions = ConcurrentHashMap<ComposerDrafts.Key, Long>()
+    private val optimistic = ConcurrentHashMap<ComposerDrafts.Key, Edit>()
+    private val clearing = ConcurrentHashMap<ComposerDrafts.Key, Long>()
+    private var actorIdentity = 0L // IO actor only
+    @Volatile private var view = IncomingShareView()
+    @Volatile private var viewIdentity = -1L
+    private val mutable = MutableStateFlow<Pending?>(null)
     val state = mutable.asStateFlow()
-    private fun publish(next: ShareDraftStore.Snapshot, keepRemoved: Boolean = false) {
-        disk?.commit(next, keepRemoved)
-        journal = next
-    }
-    private fun deleteTransaction(next: ShareDraftStore.Snapshot, keepRemoved: Boolean = false) {
-        try { publish(next, keepRemoved) }
-        catch (_: Exception) {
-            // A cancellation/sign-out must not reappear after a full-disk write failure.
-            disk?.discardJournal()
-            journal = ShareDraftStore.Snapshot()
+    private val mutableReady = MutableStateFlow(false)
+    val ready = mutableReady.asStateFlow()
+    private val mutableRevision = MutableStateFlow(0L)
+    val revision = mutableRevision.asStateFlow()
+    private val mutableError = MutableStateFlow<String?>(null)
+    val persistenceError = mutableError.asStateFlow()
+
+    init {
+        scope.launch {
+            var failure: Throwable? = null
+            val box = try {
+                beforeLoad()
+                IncomingShareMailbox(disk, now).also { publish(it); withContext(uiDispatcher) { mutableReady.value = true } }
+            } catch (error: Throwable) {
+                failure = error
+                reportFailure()
+                null
+            }
+            for (work in queue) {
+                if (work is EditWork) synchronized(queueLock) {
+                    work.started = true
+                    if (tailEdit === work) tailEdit = null
+                }
+                if (box == null) { work.fail(failure ?: IllegalStateException("Share storage is unavailable.")); continue }
+                try { work.run(box) }
+                catch (_: Throwable) { reportFailure() }
+            }
         }
     }
-    fun hasDraft(key: ComposerDrafts.Key) = journal.drafts.any { it.address.key() == key } || disk?.suppressesLegacyText(key) == true
-    fun checkWritable(key: ComposerDrafts.Key) { if (hasDraft(key)) disk?.commit(journal, keepRemoved = true) }
-    fun attachments(key: ComposerDrafts.Key) = if (account == key.accountId || disk == null) delivered[key].orEmpty() else emptyList()
+    private suspend fun reportFailure() = withContext(uiDispatcher) {
+        mutableError.value = "Could not save this draft. Check storage and try again before closing the app."
+    }
+    private suspend fun publish(box: IncomingShareMailbox, afterProjection: () -> Unit = {}) {
+        val next = box.projection()
+        val pending = box.state.value
+        val epoch = actorIdentity
+        val erased = diskForStaging?.takeErasedLegacy().orEmpty()
+        withContext(uiDispatcher) {
+            if (erased.isNotEmpty()) onLegacyErased(erased)
+            view = next
+            viewIdentity = epoch
+            afterProjection()
+            mutable.value = pending.takeIf { epoch == identity.get() || it?.accountId == null }
+            mutableRevision.value++
+        }
+    }
+    private fun <T> enqueue(block: suspend (IncomingShareMailbox) -> T): Deferred<T> {
+        val result = CompletableDeferred<T>()
+        val work = object : Work {
+            override fun fail(error: Throwable) { result.completeExceptionally(error) }
+            override suspend fun run(box: IncomingShareMailbox) {
+                try {
+                    val value = block(box)
+                    publish(box)
+                    result.complete(value)
+                } catch (failure: Throwable) {
+                    runCatching { publish(box) }
+                    result.completeExceptionally(failure)
+                    reportFailure()
+                }
+            }
+        }
+        synchronized(queueLock) {
+            tailEdit = null // Never conflate text across a consumption/deletion/identity barrier.
+            check(queue.trySend(work).isSuccess)
+        }
+        return result
+    }
+    private fun current() = viewIdentity == identity.get()
+    fun isBound(account: String) = ready.value && current() && view.account == account
+    fun hasDraft(key: ComposerDrafts.Key) = key in view.texts || key in view.legacy || view.suppressAll
+    fun attachments(key: ComposerDrafts.Key): List<ComposerAttachment> =
+        if (current() && view.account == key.accountId && !clearing.containsKey(key)) view.files[key].orEmpty() else emptyList()
     fun owns(key: ComposerDrafts.Key, id: String) = attachments(key).any { it.id == id }
-    fun text(key: ComposerDrafts.Key): String? = journal.drafts.firstOrNull { it.address.key() == key && account == key.accountId }?.text ?: if (disk?.suppressesLegacyText(key) == true) "" else null
+    fun text(key: ComposerDrafts.Key): String? {
+        if (clearing.containsKey(key)) return ""
+        if (isBound(key.accountId)) {
+            optimistic[key]?.takeIf { it.identity == identity.get() && it.keyVersion == keyVersions[key].orZero() }?.let { return it.text }
+            view.texts[key]?.let { return it }
+        }
+        return if (key in view.legacy || view.suppressAll || !current()) "" else null
+    }
+    private fun Long?.orZero() = this ?: 0L
+    private fun invalidate(key: ComposerDrafts.Key): Long {
+        val version = keySequence.incrementAndGet()
+        keyVersions[key] = version
+        optimistic.remove(key)
+        clearing[key] = version
+        return version
+    }
+    private fun finishClear(key: ComposerDrafts.Key, version: Long) { clearing.remove(key, version) }
+
+    /** No disk access, serialization or flush occurs in the input callback. At most one trailing edit is queued. */
     fun writeText(key: ComposerDrafts.Key, value: String) {
-        if (account != key.accountId || text(key) == null) return
-        val draft = journal.drafts.firstOrNull { it.address.key() == key }
-            ?.copy(text = value, updated = now())
-            ?: ShareDraftStore.Draft(ShareDraftStore.Address.from(key), value, emptyList(), now())
-        publish(journal.copy(drafts = journal.drafts.filterNot { it.address.key() == key } + draft))
-    }
-    fun forgetAttachment(key: ComposerDrafts.Key, id: String) {
-        if (!owns(key, id)) return
-        deleteTransaction(journal.copy(drafts = journal.drafts.map {
-            if (it.address.key() == key) it.copy(blobs = it.blobs.filterNot { blob -> blob.id == id }, updated = now()) else it
-        }))
-        val remaining = attachments(key).filterNot { it.id == id }
-        if (remaining.isEmpty()) delivered.remove(key) else delivered[key] = remaining
-    }
-    fun sent(key: ComposerDrafts.Key) {
-        if (!hasDraft(key)) return
-        // Empty text is an explicit tombstone against an older asynchronous text-preference write.
-        deleteTransaction(journal.copy(drafts = journal.drafts.map {
-            if (it.address.key() == key) it.copy(text = "", blobs = emptyList(), updated = now()) else it
-        }), keepRemoved = true)
-        disk?.eraseLegacyText(setOf(key))
-        delivered.remove(key) // user initiated submission now owns the files; never auto-resume it
-    }
-    fun drop(key: ComposerDrafts.Key) {
-        if (!hasDraft(key)) return
-        deleteTransaction(journal.copy(drafts = journal.drafts.map { if (it.address.key() == key) it.copy(text = "", blobs = emptyList(), updated = now()) else it }))
-        disk?.eraseLegacyText(setOf(key))
-        delivered.remove(key)?.forEach { it.releaseOwnedCopy() }
-    }
-    fun pruneTeams(allowed: Set<String>) {
-        val removed = journal.drafts.filter { it.address.team !in allowed && (it.text.isNotEmpty() || it.blobs.isNotEmpty()) }.map { it.address.key() }
-        if (removed.isNotEmpty()) {
-            deleteTransaction(journal.copy(drafts = journal.drafts.map { if (it.address.key() in removed) it.copy(text = "", blobs = emptyList(), updated = now()) else it }))
-            disk?.eraseLegacyText(removed.toSet())
-            removed.forEach { delivered.remove(it)?.forEach { file -> file.releaseOwnedCopy() } }
+        if (!isBound(key.accountId) || !hasDraft(key) || clearing.containsKey(key)) return
+        require(value.length <= ai.nuphos.android.data.IncomingShareIntents.MAX_TEXT)
+        val edit = Edit(key, value, identity.get(), keyVersions[key].orZero())
+        optimistic[key] = edit
+        synchronized(queueLock) {
+            val tail = tailEdit
+            if (tail != null && !tail.started && tail.edit.key == key) tail.edit = edit
+            else {
+                val next = EditWork(edit) { captured, box ->
+                    if (captured.identity == identity.get() && captured.keyVersion == keyVersions[captured.key].orZero()) {
+                        try {
+                            box.writeText(captured.key, captured.text)
+                            publish(box)
+                            withContext(uiDispatcher) {
+                                optimistic.remove(captured.key, captured)
+                                if (optimistic.isEmpty() && clearing.isEmpty()) mutableError.value = null
+                                mutableRevision.value++
+                            }
+                        } finally { publish(box) }
+                    }
+                }
+                tailEdit = next
+                check(queue.trySend(next).isSuccess)
+            }
         }
     }
-    fun begin(accountId: String?): Long? {
-        if (mutable.value != null) return null
-        val id = ++sequence
-        mutable.value = Pending(id, accountId)
-        return id
-    }
-    fun remainingBytes(): Long = ai.nuphos.android.data.AttachmentTransfers.MAX_TOTAL_BYTES -
-        (disk?.usedBytes() ?: journal.drafts.flatMap { it.blobs }.sumOf { it.size })
-    fun prepare(attachments: List<ComposerAttachment>, check: () -> Unit = {}) = disk?.retain(attachments, check) ?: attachments
-    fun loaded(id: Long, text: String, attachments: List<ComposerAttachment>): Boolean {
-        val current = mutable.value
-        if (current?.id != id) { attachments.forEach { it.releaseOwnedCopy() }; return false }
-        val retainedBytes = delivered.values.flatten().sumOf { it.sizeBytes }
-        if (retainedBytes + attachments.sumOf { it.sizeBytes } > ai.nuphos.android.data.AttachmentTransfers.MAX_TOTAL_BYTES) {
-            attachments.forEach { it.releaseOwnedCopy() }
-            failed(id, "Shared attachment drafts exceed 500 MiB. Send or remove an existing draft first.")
-            return false
+    internal fun close() { queue.close(); scope.cancel(); uiScope.cancel() }
+    suspend fun awaitIdle() { enqueue { }.await() }
+    suspend fun checkWritable(key: ComposerDrafts.Key) = enqueue { box ->
+        val retry = optimistic[key]?.takeIf { it.identity == identity.get() && it.keyVersion == keyVersions[key].orZero() }
+        if (retry != null) box.writeText(key, retry.text)
+        box.checkWritable(key)
+        publish(box)
+        withContext(uiDispatcher) {
+            if (retry != null) optimistic.remove(key, retry)
+            if (optimistic.isEmpty() && clearing.isEmpty()) mutableError.value = null
         }
-        publish(journal.copy(pending = ShareDraftStore.Pending(id, current.accountId, text, disk?.describe(attachments).orEmpty(), now())))
-        mutable.value = current.copy(text = text, attachments = attachments, loading = false)
-        return true
+    }.await()
+    suspend fun begin(accountId: String?): Long? {
+        if (state.value != null || !importStarting.compareAndSet(false, true)) return null
+        val epoch = identity.get()
+        return try { enqueue { if (epoch == identity.get()) it.begin(accountId) else null }.await() }
+        finally { importStarting.set(false) }
     }
-    fun failed(id: Long, error: String) {
-        val current = mutable.value ?: return
-        if (current.id == id) mutable.value = current.copy(loading = false, error = error, destination = null)
+    suspend fun remainingBytes() = enqueue { it.remainingBytes() }.await()
+    // Payload staging callers already run on Dispatchers.IO, independently of the metadata actor.
+    fun prepare(attachments: List<ComposerAttachment>, check: () -> Unit = {}): List<ComposerAttachment> =
+        diskForStaging?.retain(attachments, check) ?: attachments
+    suspend fun loaded(id: Long, text: String, files: List<ComposerAttachment>): Boolean {
+        val epoch = identity.get()
+        return enqueue {
+            if (epoch == identity.get()) it.loaded(id, text, files)
+            else { files.forEach { file -> file.releaseOwnedCopy() }; false }
+        }.await()
     }
-    fun bindAccount(accountId: String) {
-        val changed = journal.drafts.any { it.address.account != accountId } ||
-            journal.pending?.account?.let { it != accountId } == true ||
-            mutable.value?.accountId?.let { it != accountId } == true
-        if (changed) identityReset()
-        account = accountId
-        if (delivered.isEmpty()) journal.drafts.filter { it.address.account == accountId }.forEach {
-            delivered[it.address.key()] = disk?.restore(it.blobs).orEmpty()
-        }
-        val current = mutable.value ?: return
-        if (current.accountId == null) {
-            if (journal.pending != null) publish(journal.copy(pending = journal.pending!!.copy(account = accountId)))
-            mutable.value = current.copy(accountId = accountId)
-        } else if (current.accountId != accountId) cancel()
+    fun failed(id: Long, error: String) { enqueue { it.failed(id, error) } }
+    suspend fun bindAccount(accountId: String) {
+        val epoch = identity.get()
+        enqueue { if (epoch == identity.get()) it.bindAccount(accountId) }.await()
     }
-    fun choose(id: Long, key: ComposerDrafts.Key): Boolean {
-        val current = mutable.value ?: return false
-        if (current.id != id || current.loading || current.error != null || current.accountId != key.accountId) return false
-        mutable.value = current.copy(destination = key)
-        return true
+    suspend fun choose(id: Long, key: ComposerDrafts.Key): Boolean {
+        val epoch = identity.get()
+        return enqueue { epoch == identity.get() && it.choose(id, key) }.await()
     }
-    fun consumed(id: Long, key: ComposerDrafts.Key, mergedText: String = "", combined: List<ComposerAttachment>? = null): Boolean {
-        val current = mutable.value ?: return false
-        if (current.id != id || current.destination != key) return false
-        val files = combined ?: (attachments(key) + current.attachments).distinctBy { it.id }
-        val draft = ShareDraftStore.Draft(ShareDraftStore.Address.from(key), mergedText, disk?.describe(files).orEmpty(), now())
-        publish(journal.copy(pending = null, drafts = journal.drafts.filterNot { it.address.key() == key } + draft))
-        delivered[key] = files
-        mutable.value = null
-        return true
+    suspend fun consumed(id: Long, key: ComposerDrafts.Key, mergedText: String = "", combined: List<ComposerAttachment>? = null, onCommitted: () -> Unit = {}): Boolean {
+        val epoch = identity.get()
+        return enqueue { box ->
+            val accepted = epoch == identity.get() && box.consumed(id, key, mergedText, combined)
+            if (accepted) publish(box) { if (epoch == identity.get()) onCommitted() }
+            accepted
+        }.await()
     }
     fun cancel() {
-        val current = mutable.value
-        deleteTransaction(journal.copy(pending = null))
-        mutable.value = null
-        current?.attachments?.forEach { it.releaseOwnedCopy() }
+        if (!cancelQueued.compareAndSet(false, true)) return
+        enqueue { try { it.cancel() } finally { cancelQueued.set(false) } }
     }
     fun identityReset() {
-        // Initial sign-in can claim a newly captured, unowned share. Bound content never survives replacement.
-        val unowned = mutable.value?.takeIf { it.accountId == null }
-        deleteTransaction(ShareDraftStore.Snapshot(pending = journal.pending?.takeIf { it.account == null }))
-        delivered.values.flatten().forEach { it.releaseOwnedCopy() }
-        delivered.clear()
-        if (unowned == null) mutable.value?.attachments?.forEach { it.releaseOwnedCopy() }
-        mutable.value = unowned
-        account = null
+        val epoch = identity.incrementAndGet()
+        optimistic.clear()
+        clearing.clear()
+        keyVersions.clear()
+        uiScope.launch { mutable.value = mutable.value?.takeIf { it.accountId == null }; mutableRevision.value++ }
+        enqueue { it.identityReset(); actorIdentity = epoch }
     }
+    suspend fun forgetAttachment(key: ComposerDrafts.Key, id: String) = enqueue { it.forgetAttachment(key, id) }.await()
+    suspend fun sent(key: ComposerDrafts.Key, files: List<ComposerAttachment> = emptyList()) {
+        val version = invalidate(key)
+        enqueue { it.handoff(files); it.sent(key) }.await()
+        finishClear(key, version)
+    }
+    suspend fun drop(key: ComposerDrafts.Key) {
+        val version = invalidate(key)
+        enqueue { it.drop(key) }.await()
+        finishClear(key, version)
+    }
+    suspend fun pruneTeams(allowed: Set<String>) {
+        val removed = view.texts.keys.filter { it.teamId !in allowed }.associateWith(::invalidate)
+        enqueue { it.pruneTeams(allowed) }.await()
+        removed.forEach { (key, version) -> finishClear(key, version) }
+    }
+    suspend fun handoff(files: List<ComposerAttachment>) = enqueue { it.handoff(files) }.await()
+    fun releaseLater(files: List<ComposerAttachment>) { enqueue { it.releaseUnowned(files) } }
+    suspend fun releaseUnowned(files: List<ComposerAttachment>) = enqueue { it.releaseUnowned(files) }.await()
 }

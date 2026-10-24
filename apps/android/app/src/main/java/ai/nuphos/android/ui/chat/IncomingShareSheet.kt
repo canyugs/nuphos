@@ -79,6 +79,8 @@ fun IncomingShareSheet(nav: NavHostController) {
                         store.selectedTeam?.id != selected.id || mailbox.state.value?.id != request.id) return@withContext
                     val destination = if (sessionId == null) ComposerDrafts.Destination.NewChat else ComposerDrafts.Destination.Chat(sessionId)
                     if (!mailbox.choose(request.id, ComposerDrafts.Key(account, selected.id, destination))) return@withContext
+                    if (auth.generation != generation || auth.user?.id != account || !auth.aiAllowed ||
+                        store.selectedTeam?.id != selected.id || mailbox.state.value?.id != request.id) return@withContext
                     if (sessionId == null) nav.navigate("home") { popUpTo("home"); launchSingleTop = true }
                     else nav.navigate("conversation/${android.net.Uri.encode(sessionId)}") { popUpTo("home"); launchSingleTop = true }
                 }
