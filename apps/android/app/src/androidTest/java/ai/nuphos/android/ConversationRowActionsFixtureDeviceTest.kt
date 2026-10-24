@@ -4,9 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.DpSize
@@ -37,9 +41,11 @@ class ConversationRowActionsFixtureDeviceTest {
     private val busy = mutableStateOf(false)
     private val width = mutableStateOf(390)
 
-    private fun render(rtl: Boolean = false, large: Boolean = false) {
+    private fun render(rtl: Boolean = false, large: Boolean = false, keyboard: Boolean = false) {
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(width.value.dp, 900.dp))) {
+                val inputMode = LocalInputModeManager.current
+                SideEffect { if (keyboard) inputMode.requestInputMode(InputMode.Keyboard) }
                 val density = LocalDensity.current
                 CompositionLocalProvider(
                     LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
@@ -172,6 +178,18 @@ class ConversationRowActionsFixtureDeviceTest {
         compose.onNodeWithTag("rail-archive:child").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, writes) }
         shot("expanded-pane")
+    }
+
+    @Test fun keyboardOpensMenuAndDismissRestoresMoreFocus() {
+        render(keyboard = true)
+        compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+        more().performSemanticsAction(SemanticsActions.RequestFocus) { it() }
+        more().assertIsFocused()
+        more().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithTag("menu-watch:child").assertIsDisplayed()
+        Espresso.pressBack()
+        more().assertIsFocused()
+        compose.runOnIdle { assertEquals(0, opens); assertEquals(0, writes) }
     }
 
 }
