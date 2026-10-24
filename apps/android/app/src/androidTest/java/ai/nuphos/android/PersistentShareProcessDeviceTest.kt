@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.content.pm.PackageManager
 import androidx.compose.runtime.MutableState
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
@@ -224,6 +225,7 @@ class PersistentShareProcessDeviceTest {
     private fun key() = ai.nuphos.android.session.ComposerDrafts.Key(NuphosUser.preview.id, a,
         ai.nuphos.android.session.ComposerDrafts.Destination.Chat("fixture-chat"))
     private fun newKey() = key().copy(destination = ai.nuphos.android.session.ComposerDrafts.Destination.NewChat)
+    private fun ordinaryKey() = key().copy(destination = ai.nuphos.android.session.ComposerDrafts.Destination.Chat("ordinary-untouched"))
     private val sharedText = "Synthetic shared note https://example.com/share-fixture"
     private val mergedText = "Existing synthetic draft\n\n$sharedText"
     private fun open(existing: Boolean = false) {
@@ -252,6 +254,8 @@ class PersistentShareProcessDeviceTest {
                     app.incomingShares.identityReset(); app.incomingShares.cancel()
                     auth.composerDrafts.clear()
                     app.incomingShares.bindAccount(NuphosUser.preview.id)
+                    // Match ChatComposer.updateText: a deliberate new edit replaces any old cleanup guard first.
+                    app.incomingShares.writeText(key(), "Existing synthetic draft")
                     auth.composerDrafts.bind(NuphosUser.preview.id, a, key().destination)!!.write("Existing synthetic draft")
                 }
                 sender("multiple")
@@ -366,6 +370,28 @@ class PersistentShareProcessDeviceTest {
                 assertNull(app.incomingShares.state.value)
                 assertTrue(app.shareDraftStore.load().drafts.isEmpty())
             }
+            "damageDeliveredMetadata", "removeDeliveredFile" -> {
+                instrumentation.runOnMainSync { app.incomingShares.bindAccount(NuphosUser.preview.id) }
+                assertFiles(key())
+                instrumentation.runOnMainSync {
+                    auth.composerDrafts.bind(NuphosUser.preview.id, a, key().destination)!!.write("Stale shared preference must never return")
+                    auth.composerDrafts.bind(NuphosUser.preview.id, a, ordinaryKey().destination)!!.write("Unrelated ordinary draft survives")
+                    assertTrue(app.getSharedPreferences("nuphos.composer-drafts", Context.MODE_PRIVATE).edit().commit())
+                }
+                if (phase == "damageDeliveredMetadata") java.io.File(app.noBackupFilesDir, "share-drafts-v1/state.json").writeText("{unfinished")
+                else app.incomingShares.attachments(key()).first().releaseOwnedCopy()
+            }
+            "verifyDeliveredCorrupt" -> {
+                assertNull(app.incomingShares.state.value)
+                instrumentation.runOnMainSync {
+                    assertEquals("", app.incomingShares.text(key()) ?: auth.composerDrafts.bind(NuphosUser.preview.id, a, key().destination)!!.text)
+                    assertEquals("Unrelated ordinary draft survives", auth.composerDrafts.bind(NuphosUser.preview.id, a, ordinaryKey().destination)!!.text)
+                }
+                assertTrue(app.incomingShares.attachments(key()).isEmpty())
+                open(existing = true)
+                awaitText("Linked fixture chat")
+                compose.onAllNodesWithText("Stale shared preference must never return").assertCountEquals(0)
+            }
             "removeFile" -> {
                 val pending = requireNotNull(app.incomingShares.state.value)
                 pending.attachments.first().releaseOwnedCopy()
@@ -383,6 +409,8 @@ class PersistentShareProcessDeviceTest {
                 java.io.File(app.filesDir, "incoming-share-attachments").mkdirs()
                 java.io.File(app.filesDir, "incoming-share-attachments/legacy.upload").writeText("legacy synthetic")
                 instrumentation.runOnMainSync {
+                    app.incomingShares.bindAccount(NuphosUser.preview.id)
+                    app.incomingShares.writeText(newKey(), "Legacy synthetic text draft")
                     auth.composerDrafts.bind(NuphosUser.preview.id, a, newKey().destination)!!.write("Legacy synthetic text draft")
                     app.getSharedPreferences("nuphos.composer-drafts", Context.MODE_PRIVATE).edit().commit()
                 }

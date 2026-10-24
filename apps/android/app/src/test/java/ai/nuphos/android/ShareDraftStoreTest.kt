@@ -232,4 +232,120 @@ class ShareDraftStoreTest {
         assertTrue(store().assets.listFiles().orEmpty().isEmpty())
     }
 
+    @Test fun tombstoneSurvivesAnUnrelatedCancellationThatCannotPublishMetadata() {
+        var canClear = false
+        val legacy = mutableMapOf(key() to "already submitted", key(team = "ordinary") to "ordinary draft")
+        fun disk() = ShareDraftStore(root, discardLegacyText = { keys ->
+            if (canClear) { keys.forEach { legacy.remove(it) }; true } else false
+        }) { clock }
+        val shares = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        val id = shares.begin("A")!!
+        shares.loaded(id, "shared", emptyList()); shares.choose(id, key()); shares.consumed(id, key(), "merged")
+        shares.sent(key())
+        val pending = shares.begin("A")!!; shares.loaded(pending, "unrelated", emptyList())
+        File(root, "state.next").mkdir(); File(root, "state.next/block").writeText("disk failure")
+        shares.cancel()
+        assertFalse(File(root, "state.json").exists())
+        File(root, "state.next").deleteRecursively()
+        val restored = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        assertEquals("", restored.text(key()) ?: legacy[key()])
+        assertEquals("ordinary draft", restored.text(key(team = "ordinary")) ?: legacy[key(team = "ordinary")])
+        assertEquals("already submitted", legacy[key()])
+        canClear = true
+        val cleared = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        assertNull(cleared.text(key()) ?: legacy[key()])
+        assertEquals("ordinary draft", legacy[key(team = "ordinary")])
+    }
+    @Test fun deliveredDraftCorruptionCannotFallBackToLegacyTextOrEraseOrdinaryDrafts() {
+        for (corruption in listOf("missing payload", "changed payload", "invalid metadata", "missing metadata")) {
+            root.deleteRecursively(); root.mkdirs()
+            val legacy = mapOf(key() to "stale shared text", key(team = "ordinary") to "ordinary")
+            fun disk() = ShareDraftStore(root, discardLegacyText = { false }) { clock }
+            val shares = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+            val id = shares.begin("A")!!; val files = shares.prepare(listOf(file()))
+            shares.loaded(id, "shared", files); shares.choose(id, key()); shares.consumed(id, key(), "merged", files)
+            when (corruption) {
+                "missing payload" -> disk().assets.listFiles()!!.single().delete()
+                "changed payload" -> disk().assets.listFiles()!!.single().appendText("changed")
+                "invalid metadata" -> File(root, "state.json").writeText("{invalid")
+                "missing metadata" -> File(root, "state.json").delete()
+            }
+            val restored = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+            assertEquals(corruption, "", restored.text(key()) ?: legacy[key()])
+            assertTrue(restored.attachments(key()).isEmpty())
+            assertEquals("ordinary", restored.text(key(team = "ordinary")) ?: legacy[key(team = "ordinary")])
+            restored.writeText(key(), "new manual edit")
+            assertEquals("new manual edit", IncomingShares(disk()) { clock }.also { it.bindAccount("A") }.text(key()))
+        }
+    }
+    @Test fun failedFirstDeliveryDoesNotSuppressAnUnrelatedPreexistingComposerDraft() {
+        val disk = ShareDraftStore(root, discardLegacyText = { false }) { clock }
+        val shares = IncomingShares(disk) { clock }.also { it.bindAccount("A") }
+        val id = shares.begin("A")!!; shares.loaded(id, "pending", emptyList()); shares.choose(id, key())
+        File(root, "state.next").mkdir(); File(root, "state.next/block").writeText("publication fails after guard")
+        assertThrows(Exception::class.java) { shares.consumed(id, key(), "ordinary plus pending") }
+        assertNull(shares.text(key())) // an uncommitted guard must not hide the live ordinary draft
+        File(root, "state.next").deleteRecursively()
+        // An unrelated successful commit must not accidentally make that prepared guard authoritative.
+        shares.cancel()
+        val restored = IncomingShares(ShareDraftStore(root, discardLegacyText = { false }) { clock }) { clock }.also { it.bindAccount("A") }
+        assertNull(restored.state.value)
+        assertEquals("ordinary", restored.text(key()) ?: "ordinary")
+        assertTrue(File(root, "authorities").listFiles().orEmpty().isEmpty())
+    }
+    @Test fun malformedAuthorityFailsClosedWithoutDeletingAnyLegacyPreference() {
+        File(root, "authorities").mkdirs()
+        File(root, "authorities/unknown.json").writeText("{bad}")
+        var eraseCalls = 0
+        val disk = ShareDraftStore(root, discardLegacyText = { eraseCalls++; true }) { clock }
+        val restored = IncomingShares(disk) { clock }.also { it.bindAccount("A") }
+        assertEquals("", restored.text(key()) ?: "must stay hidden")
+        assertEquals(0, eraseCalls)
+        assertTrue(File(root, "authorities/unknown.json").exists())
+    }
+
+    @Test fun preparedAuthorityOnRestartPreservesTheOrdinaryDraftAndPendingShare() {
+        var erased = false
+        fun disk() = ShareDraftStore(root, discardLegacyText = { erased = true; true }) { clock }
+        val shares = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        val id = shares.begin("A")!!; shares.loaded(id, "pending", emptyList()); shares.choose(id, key())
+        File(root, "state.next").mkdir(); File(root, "state.next/block").writeText("publication fails")
+        assertThrows(Exception::class.java) { shares.consumed(id, key(), "ordinary plus pending") }
+        File(root, "state.next").deleteRecursively()
+        val restored = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        assertEquals("pending", restored.state.value!!.text)
+        assertNull(restored.text(key()))
+        assertFalse("An uncommitted import must never erase ordinary preferences", erased)
+    }
+
+    @Test fun publicationAfterJournalDeletionEstablishesABaselineBeforePreparingAnAuthority() {
+        fun disk() = ShareDraftStore(root, discardLegacyText = { false }) { clock }
+        val shares = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        var id = shares.begin("A")!!; shares.loaded(id, "first", emptyList())
+        File(root, "state.next").mkdir(); File(root, "state.next/block").writeText("delete fallback")
+        shares.cancel(); File(root, "state.next").deleteRecursively()
+        assertFalse(File(root, "state.json").exists())
+        id = shares.begin("A")!!; shares.loaded(id, "second", emptyList()); shares.choose(id, key())
+        File(root, "state.next").mkdir(); File(root, "state.next/block").writeText("uncommitted import")
+        assertThrows(Exception::class.java) { shares.consumed(id, key(), "ordinary plus second") }
+        File(root, "state.next").deleteRecursively()
+        val restored = IncomingShares(disk()) { clock }.also { it.bindAccount("A") }
+        assertEquals("second", restored.state.value!!.text)
+        assertNull(restored.text(key()))
+    }
+
+    @Test fun failedPreparedMarkerRetirementCannotUnlinkTheProofOfAnUncommittedImport() {
+        val shares = IncomingShares(ShareDraftStore(root, discardLegacyText = { false }) { clock }) { clock }.also { it.bindAccount("A") }
+        val id = shares.begin("A")!!; shares.loaded(id, "pending", emptyList()); shares.choose(id, key())
+        val baseline = File(root, "state.json").readText()
+        File(root, "state.next").mkdir(); File(root, "state.next/block").writeText("unavailable replacement")
+        assertThrows(Exception::class.java) { shares.consumed(id, key(), "uncommitted") }
+        File(root, "state.next").deleteRecursively()
+        val marker = File(root, "authorities").listFiles()!!.single()
+        assertTrue(marker.delete()); assertTrue(marker.mkdir()); File(marker, "block").writeText("cannot unlink marker")
+        assertThrows(Exception::class.java) { shares.cancel() }
+        assertEquals(baseline, File(root, "state.json").readText())
+        assertEquals("pending", shares.state.value!!.text)
+    }
+
 }

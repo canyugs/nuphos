@@ -37,14 +37,17 @@ class IncomingShares(private val disk: ShareDraftStore? = null, private val now:
             journal = ShareDraftStore.Snapshot()
         }
     }
-    fun hasDraft(key: ComposerDrafts.Key) = journal.drafts.any { it.address.key() == key }
+    fun hasDraft(key: ComposerDrafts.Key) = journal.drafts.any { it.address.key() == key } || disk?.suppressesLegacyText(key) == true
     fun checkWritable(key: ComposerDrafts.Key) { if (hasDraft(key)) disk?.commit(journal, keepRemoved = true) }
     fun attachments(key: ComposerDrafts.Key) = if (account == key.accountId || disk == null) delivered[key].orEmpty() else emptyList()
     fun owns(key: ComposerDrafts.Key, id: String) = attachments(key).any { it.id == id }
-    fun text(key: ComposerDrafts.Key): String? = journal.drafts.firstOrNull { it.address.key() == key && account == key.accountId }?.text
+    fun text(key: ComposerDrafts.Key): String? = journal.drafts.firstOrNull { it.address.key() == key && account == key.accountId }?.text ?: if (disk?.suppressesLegacyText(key) == true) "" else null
     fun writeText(key: ComposerDrafts.Key, value: String) {
-        if (text(key) == null) return
-        publish(journal.copy(drafts = journal.drafts.map { if (it.address.key() == key) it.copy(text = value, updated = now()) else it }))
+        if (account != key.accountId || text(key) == null) return
+        val draft = journal.drafts.firstOrNull { it.address.key() == key }
+            ?.copy(text = value, updated = now())
+            ?: ShareDraftStore.Draft(ShareDraftStore.Address.from(key), value, emptyList(), now())
+        publish(journal.copy(drafts = journal.drafts.filterNot { it.address.key() == key } + draft))
     }
     fun forgetAttachment(key: ComposerDrafts.Key, id: String) {
         if (!owns(key, id)) return

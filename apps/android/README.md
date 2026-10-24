@@ -515,7 +515,12 @@ records, 128 retained payloads, 500 MiB of payload bytes and 1,000,000 text char
 metadata is limited to 8 MiB. Expiry, permission loss and send cleanup also erase
 older text preferences. An empty journal tombstone is kept if that erase fails,
 and expiry cleanup retries the erase at a later startup before that tombstone
-can be retired. Physical quota checks also count in-flight and
+can be retired. Independent per-address authority markers survive journal loss;
+only confirmed legacy-text erasure allows an orphan marker to be retired at startup.
+Each marker contains an address and transaction epoch/revision, never text or payloads;
+at most 256 markers of 2 KiB each are accepted. A prepared marker whose publication
+never committed is distinguished by the prior journal revision, preserving ordinary drafts.
+Malformed markers suppress legacy fallback without deleting unidentified preferences. Physical quota checks also count in-flight and
 unreferenced copies, so repeated interrupted imports cannot grow storage without bound. Per-draft attachment limits still apply. Incomplete
 copies and unreferenced payloads are pruned at the next process start. Invalid,
 unknown-version, expired, missing or changed payload metadata fails closed. No

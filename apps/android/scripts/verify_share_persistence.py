@@ -19,6 +19,8 @@ PHASES = [
     "seedPending", "removeFile", "verifyCorrupt",
     "seedPending", "damageMetadata", "verifyCorrupt",
     "seedLegacy", "verifyLegacy",
+    "seedPending", "consumeExisting", "damageDeliveredMetadata", "verifyDeliveredCorrupt",
+    "seedPending", "consumeExisting", "removeDeliveredFile", "verifyDeliveredCorrupt",
 ]
 
 

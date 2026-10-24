@@ -6,6 +6,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.UUID
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -32,7 +34,11 @@ class ShareDraftStore(
     }
     @Serializable data class Draft(val address: Address, val text: String, val blobs: List<Blob>, val updated: Long)
     @Serializable data class Pending(val id: Long, val account: String?, val text: String, val blobs: List<Blob>, val updated: Long)
-    @Serializable data class Snapshot(val version: Int = 1, val pending: Pending? = null, val drafts: List<Draft> = emptyList())
+    @Serializable data class Snapshot(val version: Int = 1, val pending: Pending? = null, val drafts: List<Draft> = emptyList(), val epoch: String = "", val revision: Long = 0)
+    @Serializable private data class Authority(val address: Address, val epoch: String, val revision: Long)
+    private val authorities = File(directory, "authorities")
+    private val guards = mutableMapOf<ComposerDrafts.Key, Authority>()
+    private var unsafeAuthorities = false
     val assets = File(directory, "assets")
     private val metadata = File(directory, "state.json")
     private val json = Json { ignoreUnknownKeys = false; encodeDefaults = true }
@@ -52,6 +58,7 @@ class ShareDraftStore(
     }
     private fun validate(snapshot: Snapshot) {
         require(snapshot.version == 1 && snapshot.drafts.size <= MAX_DRAFTS)
+        require(snapshot.revision >= 0 && (snapshot.epoch.isEmpty() || UUID.fromString(snapshot.epoch).toString() == snapshot.epoch))
         val addresses = snapshot.drafts.map { it.address }
         require(addresses.distinct().size == addresses.size)
         fun identity(value: String) { require(value.isNotBlank() && value.length <= 256) }
@@ -69,29 +76,88 @@ class ShareDraftStore(
         val times = snapshot.drafts.map { it.updated } + listOfNotNull(snapshot.pending?.updated)
         require(times.all { it in 1..now() + 60_000 })
     }
+    private fun authorityName(address: Address) = MessageDigest.getInstance("SHA-256")
+        .digest(json.encodeToString(address).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) } + ".json"
+    private fun atomicWrite(target: File, bytes: ByteArray) {
+        val next = File(target.parentFile, target.name.removeSuffix(".json") + ".next")
+        try {
+            require(!Files.isSymbolicLink(target.toPath()) && !Files.isSymbolicLink(next.toPath()) && !next.isDirectory)
+            FileOutputStream(next).use { it.write(bytes); it.fd.sync() }
+            Files.move(next.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally { next.delete() }
+    }
+    private fun ensureGuard(address: Address, epoch: String, revision: Long) {
+        if (address.key() in guards) return
+        require(!unsafeAuthorities && !Files.isSymbolicLink(authorities.toPath()))
+        require(authorities.isDirectory || authorities.mkdirs())
+        require(authorities.listFiles().orEmpty().size < 256) { "Too many pending draft cleanup records." }
+        val guard = Authority(address, epoch, revision)
+        val bytes = json.encodeToString(guard).toByteArray(Charsets.UTF_8)
+        require(bytes.size <= 2048)
+        atomicWrite(File(authorities, authorityName(address)), bytes)
+        guards[address.key()] = guard
+    }
+    private fun readGuards() {
+        guards.clear(); unsafeAuthorities = false
+        if (Files.isSymbolicLink(directory.toPath()) || Files.isSymbolicLink(authorities.toPath())) {
+            unsafeAuthorities = true; return
+        }
+        val files = authorities.listFiles().orEmpty()
+        if (files.size > 256 || (authorities.exists() && !authorities.isDirectory)) { unsafeAuthorities = true; return }
+        for (file in files) {
+            if (file.name.matches(Regex("[0-9a-f]{64}\\.next"))) { file.delete(); continue }
+            runCatching {
+                require(!Files.isSymbolicLink(file.toPath()) && file.isFile && file.length() in 1..2048)
+                val guard = json.decodeFromString<Authority>(file.readText())
+                require(file.name == authorityName(guard.address))
+                require(listOfNotNull(guard.address.account, guard.address.team, guard.address.session).all { it.isNotBlank() && it.length <= 256 })
+                require(guard.revision >= 0 && (guard.epoch.isEmpty() || UUID.fromString(guard.epoch).toString() == guard.epoch))
+                guards[guard.address.key()] = guard
+            }.onFailure { unsafeAuthorities = true } // Unknown identity: suppress fallback, never erase unrelated preferences.
+        }
+    }
+    private fun retireGuard(key: ComposerDrafts.Key) {
+        val guard = guards[key] ?: return
+        val file = File(authorities, authorityName(guard.address))
+        if (!file.exists() || file.delete()) guards.remove(key)
+    }
+    private fun isPrepared(guard: Authority) = guard.epoch == previous.epoch && guard.revision > previous.revision &&
+        previous.drafts.none { it.address == guard.address }
+    @Synchronized fun suppressesLegacyText(key: ComposerDrafts.Key) = unsafeAuthorities || guards[key]?.let { !isPrepared(it) } == true
     @Synchronized fun load(): Snapshot {
+        readGuards()
+        var validRoot = false
         val loaded = runCatching {
             require(!Files.isSymbolicLink(directory.toPath()) && !Files.isSymbolicLink(metadata.toPath()))
             if (!metadata.exists()) Snapshot() else {
                 require(metadata.length() in 1..MAX_METADATA_BYTES)
-                json.decodeFromString<Snapshot>(metadata.readText()).also(::validate)
+                json.decodeFromString<Snapshot>(metadata.readText()).also { validate(it); validRoot = true }
             }
         }.getOrElse {
-            // Invalid/unknown versions and missing or changed payloads fail closed; never trust paths from them.
+            // Independent authority records survive corrupt metadata or missing payloads.
             if (!Files.isSymbolicLink(directory.toPath())) metadata.delete()
             Snapshot()
         }
-        val cutoff = now() - RETENTION_MS
         previous = loaded
+        if (validRoot) guards.values.toList().filter {
+            it.epoch == loaded.epoch && it.revision > loaded.revision && loaded.drafts.none { draft -> draft.address == it.address }
+        }.forEach { retireGuard(it.address.key()) } // Prepared but never published: preserve the ordinary draft.
+        val cutoff = now() - RETENTION_MS
         val expired = loaded.drafts.filter { it.updated <= cutoff }
         val clearedText = expired.isEmpty() || runCatching { discardLegacyText(expired.map { it.address.key() }.toSet()) }.getOrDefault(false)
         val current = loaded.copy(pending = loaded.pending?.takeIf { it.updated > cutoff },
             drafts = loaded.drafts.mapNotNull {
                 if (it.updated > cutoff) it
                 else if (clearedText) null
-                else it.copy(text = "", blobs = emptyList()) // keep an expired tombstone and retry legacy cleanup next start
+                else it.copy(text = "", blobs = emptyList())
             })
+        // Legacy journals are upgraded before they may be unlinked by a later failed deletion.
+        runCatching { loaded.drafts.forEach { ensureGuard(it.address, loaded.epoch, loaded.revision) } }.onFailure { unsafeAuthorities = true }
         if (current != loaded) runCatching { commit(current) }.onFailure { metadata.delete() }
+        val active = current.drafts.map { it.address.key() }.toSet()
+        guards.keys.toList().filter { it !in active && guards[it]?.let(::isPrepared) != true }.forEach { key ->
+            if (runCatching { discardLegacyText(setOf(key)) }.getOrDefault(false)) retireGuard(key)
+        }
         cleanOrphans(current)
         return current
     }
@@ -99,24 +165,36 @@ class ShareDraftStore(
         require(!Files.isSymbolicLink(directory.toPath()) && !Files.isSymbolicLink(assets.toPath()))
         validate(snapshot)
         require(directory.isDirectory || directory.mkdirs()) { "Cannot create share draft storage." }
-        val bytes = json.encodeToString(snapshot).toByteArray(Charsets.UTF_8)
+        if (previous.epoch.isEmpty() || !metadata.exists()) {
+            // A valid older revision distinguishes an uncommitted first import from a lost committed root.
+            previous.drafts.forEach { ensureGuard(it.address, "", 0) }
+            val baseline = if (previous.epoch.isEmpty()) previous.copy(epoch = UUID.randomUUID().toString(), revision = 0) else previous
+            atomicWrite(metadata, json.encodeToString(baseline).toByteArray(Charsets.UTF_8))
+            previous = baseline
+        }
+        // Remove guards from failed live publications before advancing the high-water mark.
+        guards.values.toList().filter(::isPrepared).forEach {
+            retireGuard(it.address.key())
+            require(it.address.key() !in guards) { "Cannot retire an unpublished draft marker." }
+        }
+        val saved = snapshot.copy(epoch = previous.epoch, revision = Math.addExact(previous.revision, 1))
+        saved.drafts.forEach { ensureGuard(it.address, saved.epoch, saved.revision) }
+        val bytes = json.encodeToString(saved).toByteArray(Charsets.UTF_8)
         require(bytes.size <= MAX_METADATA_BYTES)
-        val next = File(directory, "state.next")
-        try {
-            require(!Files.isSymbolicLink(next.toPath()) && !next.isDirectory)
-            FileOutputStream(next).use { it.write(bytes); it.fd.sync() }
-            Files.move(next.toPath(), metadata.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } finally { next.delete() }
-        val currentNames = (snapshot.drafts.flatMap { it.blobs } + snapshot.pending?.blobs.orEmpty()).map { it.file }.toSet()
+        atomicWrite(metadata, bytes)
+        val currentNames = (saved.drafts.flatMap { it.blobs } + saved.pending?.blobs.orEmpty()).map { it.file }.toSet()
         if (!keepRemoved) (previous.drafts.flatMap { it.blobs } + previous.pending?.blobs.orEmpty())
             .filter { it.file !in currentNames }.forEach { runCatching { File(assets, it.file).delete() } }
-        previous = snapshot
+        previous = saved
     }
     @Synchronized fun discardJournal() {
-        // Unlinking existing metadata does not require free space for another atomic replacement.
         require(!Files.isSymbolicLink(directory.toPath()))
+        previous.drafts.forEach { ensureGuard(it.address, previous.epoch, previous.revision) }
+        // If a prepared marker could not be retired, this root is the proof that it never committed.
+        require(guards.values.none(::isPrepared)) { "Cannot discard metadata with an unpublished draft marker." }
         require(!metadata.exists() || metadata.delete()) { "Cannot remove saved share metadata." }
-        previous = Snapshot()
+        // Keep both the independent guards and revision high-water mark. Never retire guards during a live lease.
+        previous = previous.copy(pending = null, drafts = emptyList())
     }
     private fun cleanOrphans(snapshot: Snapshot) {
         if (Files.isSymbolicLink(directory.toPath())) { directory.delete(); return }
