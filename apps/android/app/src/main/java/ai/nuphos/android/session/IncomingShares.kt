@@ -283,10 +283,9 @@ class IncomingShares(
         finishClear(key, version)
     }
     suspend fun pruneTeams(accountId: String, allowed: Set<String>) {
-        if (!isBound(accountId)) return
-        val epoch = viewIdentity
+        val epoch = identity.get()
         val removed = view.texts.keys.filter { it.accountId == accountId && it.teamId !in allowed }.associateWith(::invalidate)
-        enqueue { if (epoch == identity.get() && actorIdentity == epoch) it.pruneTeams(allowed) }.await()
+        enqueue { if (epoch == identity.get() && actorIdentity == epoch) it.pruneTeams(allowed, accountId) }.await()
         removed.forEach { (key, version) -> finishClear(key, version) }
     }
     suspend fun handoff(files: List<ComposerAttachment>) = enqueue { it.handoff(files) }.await()

@@ -67,8 +67,8 @@ internal class IncomingShareMailbox(private val disk: ShareDraftStore? = null, p
         disk?.eraseLegacyText(setOf(key))
         delivered.remove(key)?.forEach { it.releaseOwnedCopy() }
     }
-    fun pruneTeams(allowed: Set<String>) {
-        val removed = journal.drafts.filter { it.address.team !in allowed && (it.text.isNotEmpty() || it.blobs.isNotEmpty()) }.map { it.address.key() }
+    fun pruneTeams(allowed: Set<String>, accountId: String? = account) {
+        val removed = journal.drafts.filter { it.address.account == accountId && it.address.team !in allowed && (it.text.isNotEmpty() || it.blobs.isNotEmpty()) }.map { it.address.key() }
         if (removed.isNotEmpty()) {
             deleteTransaction(journal.copy(drafts = journal.drafts.map { if (it.address.key() in removed) it.copy(text = "", blobs = emptyList(), updated = now()) else it }))
             disk?.eraseLegacyText(removed.toSet())

@@ -200,4 +200,26 @@ class IncomingSharesIoTest {
         } finally { shares?.close(); io.close(); ui.close(); root.deleteRecursively() }
     }
 
+    @Test(timeout = 20_000) fun membershipsArrivingBeforeAccountBindStillPruneTheirOwnRestoredDrafts() = runBlocking {
+        val root = Files.createTempDirectory("share-io-early-membership").toFile()
+        val io = Executors.newSingleThreadExecutor { Thread(it, "share-storage") }.asCoroutineDispatcher()
+        val ui = Executors.newSingleThreadExecutor { Thread(it, "share-ui") }.asCoroutineDispatcher()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var shares: IncomingShares? = null
+        try {
+            seed(ShareDraftStore(root))
+            val box = IncomingShares(ShareDraftStore(root), ioDispatcher = io, uiDispatcher = ui, beforeLoad = {
+                entered.countDown(); check(release.await(10, TimeUnit.SECONDS))
+            })
+            shares = box
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            val membership = async(start = CoroutineStart.UNDISPATCHED) { box.pruneTeams("A", emptySet()) }
+            val binding = async(start = CoroutineStart.UNDISPATCHED) { box.bindAccount("A") }
+            release.countDown(); membership.await(); binding.await()
+            assertEquals("", box.text(key()))
+            assertTrue(ShareDraftStore(root).load().drafts.single().blobs.isEmpty())
+        } finally { release.countDown(); shares?.close(); io.close(); ui.close(); root.deleteRecursively() }
+    }
+
 }
