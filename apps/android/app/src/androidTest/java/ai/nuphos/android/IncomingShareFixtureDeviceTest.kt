@@ -63,6 +63,7 @@ class IncomingShareFixtureDeviceTest {
     private val unexpected = CopyOnWriteArrayList<String>()
     private val a = "507f1f77bcf86cd799439011"
     private val b = "507f1f77bcf86cd799439012"
+    private val senderPackage get() = if (instrumentation.targetContext.packageName.endsWith("sharepersist1359")) "ai.nuphos.sharepersist1359.sender" else "ai.nuphos.shareinput1355.sender"
     private val token = "incoming-share-synthetic-no-credentials"
     @Volatile private var detailStatus = 200
     @Volatile private var adaptiveHistory = true
@@ -84,7 +85,7 @@ class IncomingShareFixtureDeviceTest {
         val optedIn = InstrumentationRegistry.getArguments().getString("isolatedIncomingShares") == "true"
         assumeTrue("Disposable emulator fixture is disabled by default", optedIn)
         assertTrue("Physical devices require the isolated fixture package",
-            Build.HARDWARE in setOf("ranchu", "goldfish") || instrumentation.targetContext.packageName == "ai.nuphos.android.shareinput1355")
+            Build.HARDWARE in setOf("ranchu", "goldfish") || instrumentation.targetContext.packageName in setOf("ai.nuphos.android.shareinput1355", "ai.nuphos.android.sharepersist1359"))
         app = instrumentation.targetContext.applicationContext as NuphosApplication
         assertNull("Refuse to replace an installed account", app.tokenStore.read())
         originalAuth = app.authSession
@@ -175,7 +176,7 @@ class IncomingShareFixtureDeviceTest {
     private fun sender(mode: String) {
         val previous = app.incomingShares.state.value?.id
         val receipt = java.util.UUID.randomUUID().toString()
-        app.startActivity(Intent().setClassName("ai.nuphos.shareinput1355.sender", "ai.nuphos.sharefixture.ShareSenderActivity")
+        app.startActivity(Intent().setClassName(senderPackage, "ai.nuphos.sharefixture.ShareSenderActivity")
             .putExtra("fixtureMode", mode).putExtra("fixtureReceipt", receipt).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         compose.waitUntil(10_000) {
             var ready = false
@@ -232,7 +233,7 @@ class IncomingShareFixtureDeviceTest {
         assertEquals("Synthetic attachment bytes", (pending.attachments.first().kind as ai.nuphos.android.model.ComposerAttachment.Kind.RetainedFile).source.open().bufferedReader().use { it.readText() })
         sender("revoke")
         try {
-            app.contentResolver.openInputStream(Uri.parse("content://ai.nuphos.shareinput1355.sender.files/fixture.txt"))?.close()
+            app.contentResolver.openInputStream(Uri.parse("content://$senderPackage.files/fixture.txt"))?.close()
             fail("Source URI remained readable after the sender revoked its grant")
         } catch (_: SecurityException) { }
         assertEquals("Synthetic attachment bytes", (pending.attachments.first().kind as ai.nuphos.android.model.ComposerAttachment.Kind.RetainedFile).source.open().bufferedReader().use { it.readText() })
@@ -277,7 +278,7 @@ class IncomingShareFixtureDeviceTest {
     }
     @Test fun systemChooserDispatchesReceiverAndCreatesOnlyAnEditableDraft() {
         identity()
-        app.startActivity(Intent().setClassName("ai.nuphos.shareinput1355.sender", "ai.nuphos.sharefixture.ShareSenderActivity")
+        app.startActivity(Intent().setClassName(senderPackage, "ai.nuphos.sharefixture.ShareSenderActivity")
             .putExtra("fixtureMode", "text").putExtra("chooser", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         var target: android.view.accessibility.AccessibilityNodeInfo? = null
         compose.waitUntil(10_000) {

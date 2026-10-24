@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
         handledShare = true
         val app = application as NuphosApplication
         val id = app.incomingShares.begin(app.authSession.user?.id)
+        val remaining = app.incomingShares.remainingBytes()
         // Capture before clearing the Activity payload; the grant remains tied to the receiving Activity.
         val captured = Intent(requireNotNull(intent))
         setIntent(Intent(this, MainActivity::class.java))
@@ -98,9 +99,12 @@ class MainActivity : ComponentActivity() {
                         if (app.incomingShares.state.value?.id != id) throw kotlinx.coroutines.CancellationException("Share canceled")
                     }
                     val inputs = payload.uris.map { checkCurrent(); ai.nuphos.android.ui.chat.selectionInput(app, it, false) }
-                    if (inputs.isEmpty()) emptyList() else ai.nuphos.android.data.AttachmentRetention(
-                        java.io.File(app.filesDir, "incoming-share-attachments")
-                    ).retain(emptyList(), inputs, check = { checkCurrent() }, prepareImage = { input, remaining -> ai.nuphos.android.ui.chat.loadImage(input, remaining) })
+                    if (inputs.isEmpty()) emptyList() else {
+                        val retained = ai.nuphos.android.data.AttachmentRetention(app.shareDraftStore.assets, maxTotalBytes = remaining)
+                            .retain(emptyList(), inputs, check = { checkCurrent() }, prepareImage = { input, bytes -> ai.nuphos.android.ui.chat.loadImage(input, bytes) })
+                        try { app.incomingShares.prepare(retained, check = { checkCurrent() }) }
+                        catch (failure: Throwable) { retained.forEach { it.releaseOwnedCopy() }; throw failure }
+                    }
                 }
                 app.incomingShares.loaded(id, payload.text, loaded)
             } catch (e: Exception) {

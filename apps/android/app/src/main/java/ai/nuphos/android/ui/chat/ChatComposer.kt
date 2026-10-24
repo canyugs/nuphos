@@ -169,27 +169,32 @@ fun ChatComposer(
     modifier: Modifier = Modifier,
 ) {
     val store = LocalAgentStore.current
+    val context = LocalContext.current
+    val incomingShares = (context.applicationContext as ai.nuphos.android.NuphosApplication).incomingShares
     val scope = rememberCoroutineScope()
     var showModel by remember(modelSettings) { mutableStateOf(false) }
     var picking by remember(draft) { mutableStateOf(false) }
     var pickerError by remember(draft) { mutableStateOf<String?>(null) }
     var focused by remember { mutableStateOf(false) }
     var localText by remember(draft) { mutableStateOf("") }
-    val fieldState = remember(draft) {
-        val initial = draft?.text ?: localText
+    val fieldState = remember(draft, draftingEnabled) {
+        val initial = if (draftingEnabled) draft?.let { incomingShares.text(it.key) ?: it.text } ?: localText else ""
         TextFieldState(initial, TextRange(initial.length))
     }
     val text = fieldState.text.toString()
     fun updateText(value: String) {
         if (!draftingEnabled) return
+        try { draft?.key?.let { incomingShares.writeText(it, value) } }
+        catch (_: Exception) { pickerError = "Could not save this draft. Free storage and try again."; return }
         fieldState.edit {
             replace(0, length, value)
             this.selection = TextRange(value.length)
         }
         if (draft != null) draft.write(value) else localText = value
     }
-    val externalText = draft?.text ?: localText
+    val externalText = if (draftingEnabled) draft?.let { incomingShares.text(it.key) ?: it.text } ?: localText else ""
     LaunchedEffect(draft, externalText) {
+        if (draftingEnabled && draft != null && incomingShares.text(draft.key) != null) draft.write(externalText)
         if (externalText != fieldState.text.toString()) {
             fieldState.edit {
                 replace(0, length, externalText)
@@ -246,10 +251,8 @@ fun ChatComposer(
             if (currentCoroutineContext().isActive) devicesLoading = false
         }
     }
-    val context = LocalContext.current
-    val incomingShares = (context.applicationContext as ai.nuphos.android.NuphosApplication).incomingShares
-    val attachments = remember(draft) {
-        mutableStateListOf<ComposerAttachment>().apply { draft?.key?.let { addAll(incomingShares.attachments(it)) } }
+    val attachments = remember(draft, draftingEnabled) {
+        mutableStateListOf<ComposerAttachment>().apply { if (draftingEnabled) draft?.key?.let { addAll(incomingShares.attachments(it)) } }
     }
     var attachmentJob by remember(draft) { mutableStateOf<Job?>(null) }
     DisposableEffect(draft, attachments) {
@@ -383,17 +386,35 @@ fun ChatComposer(
         val shared = incomingShare ?: return@LaunchedEffect
         val lease = draft ?: return@LaunchedEffect
         if (!draftingEnabled || store.selectedTeam?.id != lease.key.teamId || shared.destination != lease.key || shared.loading || shared.error != null) return@LaunchedEffect
-        // No suspension between validation, transfer and consumption: rotation cannot append twice.
+        var staged = emptyList<ComposerAttachment>()
+        val before = attachments.toList()
         try {
-            require(attachments.size + shared.attachments.size <= AttachmentTransfers.MAX_FILES) { "This draft already has too many attachments." }
-            if (attachments.isNotEmpty() || shared.attachments.isNotEmpty()) AttachmentTransfers().retain(attachments.toList() + shared.attachments)
-            val merged = listOf(text, shared.text).filter { it.isNotEmpty() }.joinToString("\n\n")
-            if (!lease.write(merged)) return@LaunchedEffect
-            updateText(merged)
-            attachments.addAll(shared.attachments)
-            incomingShares.consumed(shared.id, lease.key)
-        } catch (_: Exception) {
-            incomingShares.failed(shared.id, "This share does not fit in the selected draft. Cancel it and try fewer or smaller attachments.")
+            require(before.size + shared.attachments.size <= AttachmentTransfers.MAX_FILES)
+            if (before.isNotEmpty() || shared.attachments.isNotEmpty()) AttachmentTransfers().retain(before + shared.attachments)
+            withContext(Dispatchers.IO) {
+                val work = currentCoroutineContext()
+                staged = incomingShares.prepare(before + shared.attachments) { work.ensureActive() }
+            }
+            withContext(Dispatchers.Main.immediate) {
+                if (!draftingEnabled || store.selectedTeam?.id != lease.key.teamId || incomingShares.state.value?.id != shared.id ||
+                    attachments.map { it.id } != before.map { it.id }) throw CancellationException("Draft changed")
+                val merged = listOf(fieldState.text.toString(), shared.text).filter { it.isNotEmpty() }.joinToString("\n\n")
+                // Durable transaction consumes the share and publishes text+files together before any preference update.
+                if (!incomingShares.consumed(shared.id, lease.key, merged, staged)) throw CancellationException("Share changed")
+                lease.write(merged)
+                fieldState.edit { replace(0, length, merged); this.selection = TextRange(merged.length) }
+                attachments.clear()
+                attachments.addAll(staged)
+                before.filter { old -> staged.none { it === old } }.forEach { it.releaseOwnedCopy() }
+            }
+        } catch (failure: Exception) {
+            withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main.immediate) {
+                staged.filter { file -> before.none { it === file } && shared.attachments.none { it === file } &&
+                    !incomingShares.owns(lease.key, file.id) }.forEach { it.releaseOwnedCopy() }
+                if (failure !is CancellationException)
+                    incomingShares.failed(shared.id, "Could not save this share. Check the draft limits and free storage, then try again.")
+            }
+            if (failure is CancellationException) throw failure
         }
     }
 
@@ -402,6 +423,8 @@ fun ChatComposer(
 
     fun send() {
         if (!hasPayload || !canSubmit || !draftingEnabled || picking || voice.active) return
+        try { draft?.key?.let(incomingShares::checkWritable) }
+        catch (_: Exception) { pickerError = "Could not update saved drafts. Free storage before sending."; return }
         if (!onSend(ComposerSubmission(text.trim(), attachments.toList()))) return
         if (draft != null) draft.submitted(true, text) else localText = ""
         fieldState.edit { replace(0, length, "") }
@@ -578,7 +601,13 @@ fun ChatComposer(
                         else {
                             val value = asCharSequence().toString()
                             if (SessionMention.query(value) == null) dismissedAt = -1
-                            if (draft != null) draft.write(value) else localText = value
+                            try {
+                                draft?.key?.let { incomingShares.writeText(it, value) }
+                                if (draft != null) draft.write(value) else localText = value
+                            } catch (_: Exception) {
+                                revertAllChanges()
+                                pickerError = "Could not save this draft. Free storage and try again."
+                            }
                         }
                     },
                     enabled = draftingEnabled,
@@ -848,7 +877,11 @@ private val RemoveBadgeHitOverhang = (RemoveBadgeHitSize - RemoveBadgeSize) / 2 
 @Composable
 private fun AttachmentThumbnail(attachment: ComposerAttachment) {
     Box(Modifier.size(64.dp)) {
-        when (val kind = attachment.kind) {
+        val retainedImage = (attachment.kind as? ComposerAttachment.Kind.RetainedFile)?.takeIf { it.image }
+        if (retainedImage != null) {
+            coil3.compose.AsyncImage(model = retainedImage.source.file, contentDescription = attachment.name,
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop)
+        } else when (val kind = attachment.kind) {
             is ComposerAttachment.Kind.Image -> {
                 val bmp = remember(kind) { BitmapFactory.decodeByteArray(kind.jpeg, 0, kind.jpeg.size)?.asImageBitmap() }
                 if (bmp != null) {

@@ -116,6 +116,7 @@ class AuthSession(
                     }
                 } else {
                     composerDrafts.clear()
+                    onIdentityReset()
                     runtimeSelections.clear()
                     AiAccess.revoke()
                     if (result.version != AccountApi.AI_CONSENT_VERSION) {
@@ -162,6 +163,7 @@ class AuthSession(
                         }
                     } else {
                         composerDrafts.clear()
+                        onIdentityReset()
                         runtimeSelections.clear()
                         AiAccess.revokeIfCurrent(current, revision)
                     }
@@ -400,6 +402,7 @@ class AuthSession(
     }
 
     private fun clearToken() {
+        onIdentityReset()
         // Remove BYOK credentials without needing to decrypt a broken keystore.
         app.deleteSharedPreferences("nuphos.voice")
         composerDrafts.clear()

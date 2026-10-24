@@ -5,7 +5,10 @@ import ai.nuphos.android.data.TokenStore
 import ai.nuphos.android.session.AuthSession
 
 class NuphosApplication : Application() {
-    val incomingShares = ai.nuphos.android.session.IncomingShares()
+    lateinit var incomingShares: ai.nuphos.android.session.IncomingShares
+        private set
+    lateinit var shareDraftStore: ai.nuphos.android.data.ShareDraftStore
+        private set
     val incomingShareScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
     val conversationLinks = ai.nuphos.android.session.PendingConversationLink()
@@ -21,8 +24,12 @@ class NuphosApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Pending attachment drafts are process-local. Remove only the previous process's share copies.
+        // One-time cleanup of the legacy process-local layout; it had no recoverable metadata.
         java.io.File(filesDir, "incoming-share-attachments").deleteRecursively()
+        val legacyDraftText = ai.nuphos.android.data.ComposerDraftPreferences(this)
+        shareDraftStore = ai.nuphos.android.data.ShareDraftStore(java.io.File(noBackupFilesDir, "share-drafts-v1"),
+            discardLegacyText = legacyDraftText::erase)
+        incomingShares = ai.nuphos.android.session.IncomingShares(shareDraftStore)
         tokenStore = TokenStore(this)
         authSession = AuthSession(this, tokenStore)
         localNotifications = ai.nuphos.android.notifications.LocalNotifications(this, { authSession.user?.id }, { authSession.aiAllowed })
