@@ -11,6 +11,7 @@ import type { createPreviewToolLog } from './chat-preview-tool-log'
 import type { PreviewAgentUpdate } from '@/lib/claude-code-preview/preview-agent-update'
 
 const runtimeOwners = new WeakMap<object, Set<string>>()
+const legacyOwners = new WeakMap<object, Set<string>>()
 
 /** Consumes backend-only ownership declarations, never forwards them as chat parts. */
 export function consumePreviewToolPresentation(
@@ -26,6 +27,21 @@ export function consumePreviewToolPresentation(
 
   if (frame.type !== TOOL_PRESENTATION_FRAME && !marked) return false
   if ((!marked && frame.owner !== 'runtime') || typeof frame.toolName !== 'string') return true
+  // Without a recognized ACP identity, preserve the standard handler card.
+  // Keep that choice for this run/tool class so a late result cannot add a second card.
+  if (legacyOwners.get(log)?.has(frame.toolName)) return !marked
+  if (
+    marked &&
+    !runtimeOwners.get(log)?.has(frame.toolName) &&
+    ![...log.states.values()].some((state) => state.mcpToolName === frame.toolName)
+  ) {
+    const legacy = legacyOwners.get(log) ?? new Set<string>()
+
+    legacy.add(frame.toolName)
+    legacyOwners.set(log, legacy)
+
+    return false
+  }
   const names = runtimeOwners.get(log) ?? new Set<string>()
 
   runtimeOwners.set(log, names)

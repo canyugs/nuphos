@@ -118,7 +118,7 @@ describe('runtime-owned MCP presentation', () => {
     expect(h.log.list().map((s) => s.output)).toEqual([{ count: 1 }, { count: 2 }])
   })
 
-  test('ownership before ACP start and lost control frames have the same result', async () => {
+  test('early ownership frames retain a legacy card and lost frames use result metadata', async () => {
     for (const lost of [false, true]) {
       const h = harness()
       const module = toolModuleFromAiSdkTools(
@@ -135,7 +135,9 @@ describe('runtime-owned MCP presentation', () => {
 
       h.start('acp-1')
       h.update('acp-1', { status: 'completed', rawOutput: result })
-      expect(visibleIds(h.frames)).toEqual(['acp-1'])
+      expect(visibleIds(h.frames)).toHaveLength(1)
+      if (lost) expect(visibleIds(h.frames)).toEqual(['acp-1'])
+      else expect(visibleIds(h.frames)[0]).not.toBe('acp-1')
       expect(h.history()).toHaveLength(1)
       expect(h.log.list()[0]?.output).toBe('ok')
     }
@@ -239,6 +241,102 @@ describe('runtime-owned MCP presentation', () => {
     expect(visibleIds(h.frames)).toEqual(['artifact-call'])
     expect(JSON.stringify(result)).not.toContain('<html>')
   })
+
+  test.each([false, true])(
+    'unsupported ACP identity shapes retain structured/error handler cards: error=%s',
+    async (error) => {
+      const h = harness()
+
+      h.update('opaque-call', {
+        title: 'Execute native tool',
+        status: 'in_progress',
+        rawInput: input,
+      })
+      const module = toolModuleFromAiSdkTools(
+        {
+          render_chart: {
+            execute: () =>
+              error
+                ? Promise.reject(new Error('synthetic error'))
+                : Promise.resolve({ title: 'Synthetic chart', type: 'bar', data: [] }),
+          },
+        },
+        { publish: h.publish },
+      )
+      const result = await module.handlers(context).render_chart!(input)
+
+      h.update('opaque-call', { status: 'completed', rawOutput: { result } })
+      expect(
+        h.frames.some(
+          (f) =>
+            f.type === 'tool-input-available' && f.toolName === 'render_chart' && f.input === input,
+        ),
+      ).toBe(true)
+      const handlerResult = h.frames.find(
+        (f) =>
+          typeof f.toolCallId === 'string' &&
+          f.toolCallId.startsWith('nuphos-') &&
+          f.type === (error ? 'tool-output-error' : 'tool-output-available'),
+      )
+
+      if (error) expect(handlerResult?.errorText).toBe('synthetic error')
+      else
+        expect(handlerResult?.output).toEqual({ title: 'Synthetic chart', type: 'bar', data: [] })
+      expect(h.frames.some((f) => f.type === TOOL_PRESENTATION_FRAME)).toBe(false)
+    },
+  )
+
+  test.each([false, true])(
+    'an old adapter keeps legacy cards on a new consumer, revealed=%s',
+    async (revealed) => {
+      const h = harness()
+
+      h.start('legacy-acp')
+      if (revealed)
+        handlePreviewToolUpdate(h.emit, h.log, {
+          kind: 'tool',
+          toolCallId: 'legacy-acp',
+          title: 'OpenAB tool request',
+          status: 'pending',
+          revealed: true,
+        })
+      await h.publish(
+        {},
+        {
+          type: 'tool-input-available',
+          toolCallId: 'legacy-handler',
+          toolName: 'local_exec',
+          input,
+        },
+      )
+      await h.publish(
+        {},
+        {
+          type: 'tool-output-error',
+          toolCallId: 'legacy-handler',
+          errorText: 'legacy synthetic failure',
+        },
+      )
+      h.update('legacy-acp', {
+        status: 'completed',
+        rawOutput: {
+          result: { isError: true, content: [{ type: 'text', text: 'legacy synthetic failure' }] },
+        },
+      })
+      expect(
+        h.frames.some(
+          (f) =>
+            f.type === 'tool-output-error' &&
+            f.toolCallId === 'legacy-handler' &&
+            f.errorText === 'legacy synthetic failure',
+        ),
+      ).toBe(true)
+      // Mixed versions retain the old presentation; only two upgraded replicas deduplicate.
+      expect(visibleIds(h.frames)).toEqual(
+        revealed ? ['legacy-acp', 'legacy-handler'] : ['legacy-handler'],
+      )
+    },
+  )
 
   test('handler errors remain errors even when ACP reports the MCP request completed', async () => {
     const h = harness()
