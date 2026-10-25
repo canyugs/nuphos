@@ -41,6 +41,7 @@ fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
     var browserError by remember { mutableStateOf(false) }
     var managing by remember(store) { mutableStateOf(initialManaging) }
     var detailId by remember(store) { mutableStateOf<String?>(null) }
+    val initialCatalogRevision = remember(store) { store.state.catalogRevision }
     var pendingInitial by remember(store) { mutableStateOf(initialRuntimeId) }
     val detail = remember(store, detailId) { detailId?.let(store::detail) }
     DisposableEffect(detail) { onDispose { detail?.close() } }
@@ -49,8 +50,8 @@ fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state = store.state
     val selection = store.selection
-    LaunchedEffect(state.catalogLoaded) {
-        if (state.catalogLoaded && pendingInitial != null) { detailId = pendingInitial; pendingInitial = null }
+    LaunchedEffect(state.catalogLoaded, state.catalogRevision) {
+        if (state.catalogLoaded && state.catalogRevision > initialCatalogRevision && pendingInitial != null) { detailId = pendingInitial; pendingInitial = null }
     }
     DisposableEffect(store, lifecycle) {
         store.open()

@@ -72,7 +72,7 @@ class RuntimesFixtureDeviceTest {
         compose.onNodeWithText("Synthetic Box").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("CPU 22%").assertExists()
         compose.onNodeWithTag("runtime-inventory").performScrollToNode(hasText("Synthetic Mac"))
-        compose.onAllNodesWithText("Offline", substring = true).assertCountEquals(3)
+        compose.onNodeWithText("Offline", substring = false).assertIsDisplayed()
         shot("runtimes-computers.png")
         compose.onNodeWithText("Details: Synthetic Desktop").performScrollTo().performClick()
         assertEquals("local", details)

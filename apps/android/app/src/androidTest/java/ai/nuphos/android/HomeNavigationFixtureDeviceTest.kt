@@ -66,6 +66,9 @@ class HomeNavigationFixtureDeviceTest {
     @Volatile private var restoreFailure = false
     @Volatile private var restored = false
     @Volatile private var historyFailure = false
+    @Volatile private var runtimeCatalogHold: CountDownLatch? = null
+    @Volatile private var runtimeCatalogFailure = false
+    @Volatile private var runtimeRemoved = false
     private lateinit var plansStore: PlansStore
     private lateinit var app: NuphosApplication
     private lateinit var agent: AgentStore
@@ -115,7 +118,10 @@ class HomeNavigationFixtureDeviceTest {
                 if (!runtimeCatalog && !runtimeQuotas && !devices && !teamRead && !discovery && !favorites && !history && !consent && !connectors && !plans && !members && !policy && !browsing && !credentials && !restore && !detail) unexpected += request
                 var code = 200
                 val body = when {
-                    runtimeCatalog -> """{"runtimes":[{"id":"synthetic-cloud","provider":"codex","label":"Synthetic Cloud","status":"active","kind":"managed"}]}"""
+                    runtimeCatalog -> {
+                        check(runtimeCatalogHold?.await(15, TimeUnit.SECONDS) != false)
+                        if (runtimeCatalogFailure) { code = 503; "{}" } else if (runtimeRemoved) "{\"runtimes\":[]}" else """{"runtimes":[{"id":"synthetic-cloud","provider":"codex","label":"Synthetic Cloud","status":"active","kind":"managed"}]}"""
+                    }
                     runtimeQuotas -> """{"quotas":[]}"""
                     devices -> """{"devices":[]}"""
                     teamRead -> { """{"teams":${Http.json.encodeToString(ListSerializer(Team.serializer()), memberships)}}""" }
@@ -222,6 +228,7 @@ class HomeNavigationFixtureDeviceTest {
     }
     @Test fun allSixPagesSelectedAndBackReturnFocusWithoutWrites() {
         render(); waitText("Synthetic active conversation"); shot("normal")
+        compose.onNodeWithTag("home-page-switcher").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Tab) }
         menu(); shot("menu")
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("home-page-agent").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("home-page-agent").assertIsSelected()
@@ -234,6 +241,30 @@ class HomeNavigationFixtureDeviceTest {
             Espresso.pressBack()
         }
         assertEquals(a.id, agent.selectedTeam?.id); noWrites()
+    }
+    @Test fun repeatedDetailsWaitsForFreshCatalogAndDoesNotManageRemovedRuntime() {
+        render(); waitText("Synthetic active conversation"); select("runtimes")
+        waitText("Cloud and servers")
+        compose.onNodeWithText("Details: Synthetic Cloud").performScrollTo().performClick()
+        waitText("Refresh runtime")
+        Espresso.pressBack(); compose.waitForIdle()
+        runtimeCatalogHold = CountDownLatch(1)
+        try {
+            compose.onNodeWithText("Details: Synthetic Cloud").performScrollTo().performClick()
+            waitText("Manage runtimes")
+            compose.onNodeWithText("Refresh runtime").assertDoesNotExist()
+            compose.onNodeWithText("Save name").assertDoesNotExist()
+            runtimeCatalogFailure = true
+            runtimeCatalogHold!!.countDown()
+            waitText("We could not confirm the runtime result. Refresh saved state before continuing.")
+            compose.onNodeWithText("Refresh runtime").assertDoesNotExist()
+            compose.onNodeWithText("Save name").assertDoesNotExist()
+            runtimeCatalogFailure = false; runtimeRemoved = true
+            compose.onNodeWithText("Refresh runtimes").performScrollTo().performClick()
+            compose.waitUntil(8_000) { compose.onAllNodesWithText("This runtime is unavailable.").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Save name").assertDoesNotExist()
+            noWrites()
+        } finally { runtimeCatalogHold?.countDown() }
     }
     @Test fun runtimesDestinationAndExistingManageSheetPreserveComposerSelectionAndWorkspace() {
         render(); waitText("Synthetic active conversation"); select("runtimes")
