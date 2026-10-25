@@ -80,6 +80,7 @@ internal fun ConversationAgentSheet(
                 choices?.forEach { target ->
                     val selected = target.id == session.runtimeId
                     OutlinedButton(
+                        shape = MaterialTheme.shapes.medium,
                         enabled = !refreshing && session.canMoveAgent && target.selectable,
                         onClick = {
                             if (selected) onDismiss()
