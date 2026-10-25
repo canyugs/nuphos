@@ -2,6 +2,7 @@ import { isToolSearchTitle, nuphosToolName } from '@/lib/claude-code-preview/pre
 import {
   TOOL_PRESENTATION,
   TOOL_PRESENTATION_FRAME,
+  TOOL_PRESENTATION_ID,
   runtimeToolResult,
   runtimeToolOutput,
 } from '@/lib/claude-code-preview/preview-tool-presentation'
@@ -12,6 +13,7 @@ import type { PreviewAgentUpdate } from '@/lib/claude-code-preview/preview-agent
 
 const runtimeOwners = new WeakMap<object, Set<string>>()
 const legacyOwners = new WeakMap<object, Set<string>>()
+const handlerModes = new WeakMap<object, Map<string, boolean>>()
 
 /** Consumes backend-only ownership declarations, never forwards them as chat parts. */
 export function consumePreviewToolPresentation(
@@ -27,21 +29,32 @@ export function consumePreviewToolPresentation(
 
   if (frame.type !== TOOL_PRESENTATION_FRAME && !marked) return false
   if ((!marked && frame.owner !== 'runtime') || typeof frame.toolName !== 'string') return true
-  // Without a recognized ACP identity, preserve the standard handler card.
-  // Keep that choice for this run/tool class so a late result cannot add a second card.
-  if (legacyOwners.get(log)?.has(frame.toolName)) return !marked
-  if (
-    marked &&
-    !runtimeOwners.get(log)?.has(frame.toolName) &&
-    ![...log.states.values()].some((state) => state.mcpToolName === frame.toolName)
-  ) {
-    const legacy = legacyOwners.get(log) ?? new Set<string>()
+  if (marked) {
+    if (typeof frame.toolCallId !== 'string') return false
+    const modes = handlerModes.get(log) ?? new Map<string, boolean>()
 
-    legacy.add(frame.toolName)
-    legacyOwners.set(log, legacy)
+    handlerModes.set(log, modes)
+    const existing = modes.get(frame.toolCallId)
 
-    return false
-  }
+    if (existing !== undefined) return existing
+    // Opaque calls may finish before their bridge frames arrive. Do not infer
+    // an invocation's identity from a different (even completed) call of its class.
+    const opaque = [...log.states.values()].some((state) => !state.mcpToolName)
+    const supported =
+      !legacyOwners.get(log)?.has(frame.toolName) &&
+      !opaque &&
+      [...log.states.values()].some((state) => state.mcpToolName === frame.toolName)
+
+    modes.set(frame.toolCallId, supported)
+    if (!supported) {
+      const legacy = legacyOwners.get(log) ?? new Set<string>()
+
+      legacy.add(frame.toolName)
+      legacyOwners.set(log, legacy)
+
+      return false
+    }
+  } else if (legacyOwners.get(log)?.has(frame.toolName)) return true
   const names = runtimeOwners.get(log) ?? new Set<string>()
 
   runtimeOwners.set(log, names)
@@ -76,13 +89,28 @@ export function handlePreviewToolUpdate(
   const classic = nuphosToolName(update.mcpToolId) ?? known?.mcpToolName
   const result = classic ? runtimeToolResult(update.rawOutput) : null
 
-  if (result)
-    consumePreviewToolPresentation(emit, log, {
-      type: TOOL_PRESENTATION_FRAME,
-      owner: 'runtime',
-      toolName: classic,
-    })
-  const runtimeOwned = classic !== undefined && runtimeOwners.get(log)?.has(classic) === true
+  const meta = result?._meta as Record<string, unknown> | undefined
+  const handlerId = meta?.[TOOL_PRESENTATION_ID]
+  const mode = typeof handlerId === 'string' ? handlerModes.get(log)?.get(handlerId) : undefined
+  // Result metadata binds this exact ACP completion to the handler invocation.
+  // Previously consumed calls keep their mode even after an opaque call falls back.
+  const resultOwned =
+    result !== null &&
+    classic !== undefined &&
+    (mode ?? (typeof handlerId === 'string' || !legacyOwners.get(log)?.has(classic)))
+
+  if (resultOwned && mode === undefined && typeof handlerId === 'string') {
+    const modes = handlerModes.get(log) ?? new Map<string, boolean>()
+
+    modes.set(handlerId, true)
+    handlerModes.set(log, modes)
+  }
+  const runtimeOwned =
+    resultOwned ||
+    (classic !== undefined &&
+      runtimeOwners.get(log)?.has(classic) === true &&
+      !legacyOwners.get(log)?.has(classic) &&
+      [...log.states.values()].every((state) => state.mcpToolName !== undefined))
   const displayName = classic ?? name
   const hidden =
     update.revealed || runtimeOwned

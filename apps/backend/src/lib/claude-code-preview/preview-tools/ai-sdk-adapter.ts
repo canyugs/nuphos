@@ -7,7 +7,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 
 import { toolError, toolResult } from '@/lib/mcp/protocol'
 
-import { TOOL_PRESENTATION } from '../preview-tool-presentation'
+import { TOOL_PRESENTATION, TOOL_PRESENTATION_ID } from '../preview-tool-presentation'
 import { publishPreviewFrame } from '../run-frame-bridge'
 
 import type {
@@ -130,13 +130,19 @@ function adaptExecute(
         ...presentation,
       })
 
-      return { ...toolResult(output ?? null), _meta: { [TOOL_PRESENTATION]: 'runtime' } }
+      return {
+        ...toolResult(output ?? null),
+        _meta: { [TOOL_PRESENTATION]: 'runtime', [TOOL_PRESENTATION_ID]: toolCallId },
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
 
       await emit({ type: 'tool-output-error', toolCallId, errorText: message, ...presentation })
 
-      return { ...toolError(message), _meta: { [TOOL_PRESENTATION]: 'runtime' } }
+      return {
+        ...toolError(message),
+        _meta: { [TOOL_PRESENTATION]: 'runtime', [TOOL_PRESENTATION_ID]: toolCallId },
+      }
     }
   }
 }
