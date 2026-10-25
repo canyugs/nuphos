@@ -191,13 +191,15 @@ class PinnedListFixtureDeviceTest {
     }
     @Test fun desktopHrefPinAppearsAtTopAfterAsynchronousFavoritesRead() {
         holdFavorites = true
-        entries = """[{"href":"/teams/A/agent/outside","label":"Desktop remote pin"},{"href":"/teams/A/agent/child","label":"Desktop child pin"}]"""
+        entries = """[{"href":"/teams/A/agent/outside","label":"Desktop remote pin"},{"href":"/teams/A/agent/child","label":"Desktop child pin"},{"href":"/teams/B/agent/foreign","label":"Foreign team pin"},{"href":"https://example.com/teams/A/agent/external","label":"External pin"},{"key":"agent-session:child","label":"Duplicate child"}]"""
         render()
         assertTrue(favoritesHeld.await(5, java.util.concurrent.TimeUnit.SECONDS))
         compose.onNodeWithText("Loading pinned agents…").assertIsDisplayed()
         compose.onNodeWithText("Desktop remote pin").assertDoesNotExist()
         releaseFavorites.countDown()
         waitText("Desktop remote pin")
+        compose.onNodeWithText("Foreign team pin").assertDoesNotExist()
+        compose.onNodeWithText("External pin").assertDoesNotExist()
         compose.onNodeWithText("Loading pinned agents…").assertDoesNotExist()
         assertTrue(top("Synthetic child") < top("Desktop remote pin"))
         assertTrue(top("Desktop remote pin") < top("Synthetic parent"))

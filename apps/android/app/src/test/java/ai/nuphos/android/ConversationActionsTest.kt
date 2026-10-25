@@ -75,4 +75,16 @@ class ConversationActionsTest {
         assertEquals("key", ConversationActions.favoriteSessionId(preferred))
     }
 
+    @Test fun favoriteHrefMustMatchCanonicalOriginAndRequestedTeam() {
+        fun entry(href: String) = JsonValue.obj("href" to JsonValue.Str(href))
+        assertEquals("s", ConversationActions.favoriteSessionId(entry("/teams/A/agent/s"), "A"))
+        assertEquals("s", ConversationActions.favoriteSessionId(entry("https://nuphos.ai/teams/A/agent/s"), "A"))
+        for (href in listOf("https://example.com/teams/A/agent/s", "//nuphos.ai/teams/A/agent/s", "http://nuphos.ai/teams/A/agent/s", "https://user@nuphos.ai/teams/A/agent/s", "https://nuphos.ai:444/teams/A/agent/s", "/teams/B/agent/s", "/teams/A/agent/s?teamId=B", "/teams/A/agent/s#x"))
+            assertNull(href, ConversationActions.favoriteSessionId(entry(href), "A"))
+        val foreign = entry("/teams/B/agent/s")
+        assertFalse(ConversationActions.Favorites(listOf(foreign), 1, "A").contains("s"))
+        assertEquals(listOf(foreign), ConversationActions.pinnedEntries(listOf(foreign), "s", "Chat", false, "A"))
+        assertEquals(2, ConversationActions.pinnedEntries(listOf(foreign), "s", "Chat", true, "A").size)
+    }
+
 }

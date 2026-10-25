@@ -11,7 +11,7 @@ object PinnedHistory {
     fun shortcuts(favorites: ConversationActions.Favorites?, search: String, archivedOnly: Boolean): List<Shortcut> {
         if (search.isNotEmpty() || archivedOnly) return emptyList()
         return favorites?.entries.orEmpty().asReversed().mapNotNull { entry ->
-            val id = ConversationActions.favoriteSessionId(entry) ?: return@mapNotNull null
+            val id = ConversationActions.favoriteSessionId(entry, favorites?.teamId) ?: return@mapNotNull null
             Shortcut(id, entry["label"]?.stringValue?.takeIf { it.isNotBlank() } ?: "Agent")
         }.distinctBy { it.sessionId }
     }
