@@ -227,7 +227,7 @@ class HomeNavigationFixtureDeviceTest {
         try { file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } } finally { bitmap.recycle() }
     }
     @Test fun allSixPagesSelectedAndBackReturnFocusWithoutWrites() {
-        render(); waitText("Synthetic active conversation"); shot("normal")
+        render(keyboard = true); waitText("Synthetic active conversation"); shot("normal")
         compose.onNodeWithTag("home-page-switcher").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Tab) }
         menu(); shot("menu")
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("home-page-agent").fetchSemanticsNodes().isNotEmpty() }
@@ -260,7 +260,7 @@ class HomeNavigationFixtureDeviceTest {
             compose.onNodeWithText("Refresh runtime").assertDoesNotExist()
             compose.onNodeWithText("Save name").assertDoesNotExist()
             runtimeCatalogFailure = false; runtimeRemoved = true
-            compose.onNodeWithText("Refresh runtimes").performScrollTo().performClick()
+            compose.onNodeWithText("Retry runtime list").performScrollTo().performClick()
             compose.waitUntil(8_000) { compose.onAllNodesWithText("This runtime is unavailable.").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Save name").assertDoesNotExist()
             noWrites()

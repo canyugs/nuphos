@@ -81,7 +81,12 @@ fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
                     else if (store.canAdminister) OutlinedButton(onClick = { code = ""; browserError = false; managing = true }) { Text("Manage runtimes") }
                     TextButton(onClick = { code = ""; onDismiss() }) { Text("Done") }
                 }
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                state.error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                    if (managing && !state.catalogLoaded) TextButton(onClick = store::refresh, enabled = !state.busy) {
+                        Text("Retry runtime list")
+                    }
+                }
                 state.message?.let { Text(it) }
                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (selection.reselectionRequired) Text("The selected runtime is unavailable. Select a saved active runtime before starting a new agent.")
