@@ -33,19 +33,25 @@ import ai.nuphos.android.session.RuntimeSetupStore
 @Composable
 fun RuntimeSetupSheet(store: RuntimeSetupStore, onDismiss: () -> Unit,
     launchBrowser: ((String) -> Unit)? = null,
-    quotas: Map<String, ai.nuphos.android.data.RuntimeQuota> = emptyMap()) {
+    quotas: Map<String, ai.nuphos.android.data.RuntimeQuota> = emptyMap(),
+    initialManaging: Boolean = false, initialRuntimeId: String? = null) {
     var label by remember { mutableStateOf("") }
     var provider by remember { mutableStateOf("codex") }
     var code by remember { mutableStateOf("") }
     var browserError by remember { mutableStateOf(false) }
-    var managing by remember { mutableStateOf(false) }
+    var managing by remember(store) { mutableStateOf(initialManaging) }
     var detailId by remember(store) { mutableStateOf<String?>(null) }
+    var pendingInitial by remember(store) { mutableStateOf(initialRuntimeId) }
     val detail = remember(store, detailId) { detailId?.let(store::detail) }
+    DisposableEffect(detail) { onDispose { detail?.close() } }
     val scroll = key(managing, detailId) { rememberScrollState() }
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val state = store.state
     val selection = store.selection
+    LaunchedEffect(state.catalogLoaded) {
+        if (state.catalogLoaded && pendingInitial != null) { detailId = pendingInitial; pendingInitial = null }
+    }
     DisposableEffect(store, lifecycle) {
         store.open()
         val observer = LifecycleEventObserver { _, event ->
