@@ -7,7 +7,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 
 import { toolError, toolResult } from '@/lib/mcp/protocol'
 
-import { TOOL_PRESENTATION, TOOL_PRESENTATION_FRAME } from '../preview-tool-presentation'
+import { TOOL_PRESENTATION } from '../preview-tool-presentation'
 import { publishPreviewFrame } from '../run-frame-bridge'
 
 import type {
@@ -106,9 +106,11 @@ function adaptExecute(
         // Frames are best-effort UI; the tool result itself still reaches the agent.
       })
 
-    // Publish ownership before execution; the ACP id remains the only card id.
-    // Result metadata repeats it if the cross-replica control frame is lost.
-    await emit({ type: TOOL_PRESENTATION_FRAME, toolName: name, owner: 'runtime' })
+    // New hosting turns consume these marked frames and present only the ACP id.
+    // Old replicas still receive the standard pair during a rolling upgrade.
+    const presentation = { [TOOL_PRESENTATION]: 'runtime', toolName: name }
+
+    await emit({ type: 'tool-input-available', toolCallId, input: args, ...presentation })
     try {
       // Unlike the AI SDK loop, the MCP protocol dispatcher does not parse
       // arguments against the advertised schema. Do that here so required
@@ -121,9 +123,18 @@ function adaptExecute(
         abortSignal: new AbortController().signal,
       })
 
+      await emit({
+        type: 'tool-output-available',
+        toolCallId,
+        output: output ?? null,
+        ...presentation,
+      })
+
       return { ...toolResult(output ?? null), _meta: { [TOOL_PRESENTATION]: 'runtime' } }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+
+      await emit({ type: 'tool-output-error', toolCallId, errorText: message, ...presentation })
 
       return { ...toolError(message), _meta: { [TOOL_PRESENTATION]: 'runtime' } }
     }

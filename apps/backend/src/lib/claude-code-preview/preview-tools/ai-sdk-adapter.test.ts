@@ -2,7 +2,7 @@ import { tool } from 'ai'
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 
-import { TOOL_PRESENTATION, TOOL_PRESENTATION_FRAME } from '../preview-tool-presentation'
+import { TOOL_PRESENTATION } from '../preview-tool-presentation'
 
 import { toolInputJsonSchema, toolModuleFromAiSdkTools } from './ai-sdk-adapter'
 
@@ -73,9 +73,19 @@ describe('toolModuleFromAiSdkTools', () => {
     })
 
     expect(result.structuredContent).toEqual({ panelId: 'p1', title: 'EKS spend' })
-    expect(frames).toEqual([
-      { type: TOOL_PRESENTATION_FRAME, toolName: 'cost_panel_create', owner: 'runtime' },
-    ])
+    expect(frames).toHaveLength(2)
+    expect(frames[0]).toMatchObject({
+      type: 'tool-input-available',
+      toolName: 'cost_panel_create',
+      input: { label: '建立成本面板', title: 'EKS spend' },
+      [TOOL_PRESENTATION]: 'runtime',
+    })
+    expect(frames[1]).toMatchObject({
+      type: 'tool-output-available',
+      output: { panelId: 'p1', title: 'EKS spend' },
+      [TOOL_PRESENTATION]: 'runtime',
+    })
+    expect(frames[0]?.toolCallId).toBe(frames[1]?.toolCallId)
     expect(result._meta).toEqual({ [TOOL_PRESENTATION]: 'runtime' })
   })
 
@@ -98,9 +108,11 @@ describe('toolModuleFromAiSdkTools', () => {
 
     expect(result.isError).toBe(true)
     expect(result.content[0]).toMatchObject({ text: 'diagram is locked' })
-    expect(frames).toEqual([
-      { type: TOOL_PRESENTATION_FRAME, toolName: 'arch_add_node', owner: 'runtime' },
-    ])
+    expect(frames.at(-1)).toMatchObject({
+      type: 'tool-output-error',
+      errorText: 'diagram is locked',
+      [TOOL_PRESENTATION]: 'runtime',
+    })
     expect(result._meta).toEqual({ [TOOL_PRESENTATION]: 'runtime' })
   })
 
@@ -125,7 +137,7 @@ describe('toolModuleFromAiSdkTools', () => {
 
     expect(result.isError).toBe(true)
     expect(executed).toBe(false)
-    expect(frames.at(-1)?.type).toBe(TOOL_PRESENTATION_FRAME)
+    expect(frames.at(-1)?.type).toBe('tool-output-error')
     expect(result._meta).toEqual({ [TOOL_PRESENTATION]: 'runtime' })
   })
 })

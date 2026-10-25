@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { createArtifactTool } from '@/lib/agent/tools-skilled/artifact-tool'
 import { handleOpenAbPermissionRequest } from '@/lib/claude-code-preview/openab-permission-bridge'
 import { parseToolUpdate } from '@/lib/claude-code-preview/preview-agent-update'
 import {
@@ -172,6 +173,71 @@ describe('runtime-owned MCP presentation', () => {
       type: 'tool-render_chart',
       output: { title: 'Synthetic chart', type: 'bar', data: [] },
     })
+  })
+
+  test('a legacy hosting replica still receives a usable standard card pair', async () => {
+    const legacyFrames: Record<string, unknown>[] = []
+    let calls = 0
+    const module = toolModuleFromAiSdkTools(
+      {
+        local_exec: {
+          execute: () => {
+            calls++
+
+            return Promise.resolve('legacy-compatible')
+          },
+        },
+      },
+      {
+        publish: (_ctx, frame) => {
+          legacyFrames.push(frame)
+
+          return Promise.resolve()
+        },
+      },
+    )
+    const result = await module.handlers(context).local_exec!(input)
+
+    expect(calls).toBe(1)
+    expect(legacyFrames.map((f) => f.type)).toEqual([
+      'tool-input-available',
+      'tool-output-available',
+    ])
+    expect(visibleIds(legacyFrames)).toHaveLength(1)
+    expect(legacyFrames.at(-1)?.output).toBe('legacy-compatible')
+    expect(result.structuredContent).toBe('legacy-compatible')
+  })
+
+  test('artifact content stays on the canonical input while the model gets a short receipt', async () => {
+    const h = harness()
+    const artifact = {
+      label: 'Show synthetic artifact',
+      artifactId: 'synthetic-doc',
+      title: 'Synthetic document',
+      kind: 'html',
+      content: '<html><body>Synthetic</body></html>',
+    }
+
+    h.update('artifact-call', {
+      title: 'mcp.nuphos-tools.render_artifact',
+      status: 'in_progress',
+      rawInput: { server: 'nuphos-tools', tool: 'render_artifact', arguments: artifact },
+    })
+    const module = toolModuleFromAiSdkTools(
+      { render_artifact: createArtifactTool() },
+      { publish: h.publish },
+    )
+    const result = await module.handlers(context).render_artifact!(artifact)
+
+    h.update('artifact-call', { status: 'completed', rawOutput: { result } })
+    expect(h.frames.find((f) => f.type === 'tool-input-available')).toMatchObject({
+      toolName: 'render_artifact',
+      input: artifact,
+      toolCallId: 'artifact-call',
+    })
+    expect(h.history()[0]).toMatchObject({ type: 'tool-render_artifact', input: artifact })
+    expect(visibleIds(h.frames)).toEqual(['artifact-call'])
+    expect(JSON.stringify(result)).not.toContain('<html>')
   })
 
   test('handler errors remain errors even when ACP reports the MCP request completed', async () => {

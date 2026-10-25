@@ -1,5 +1,6 @@
 import { isToolSearchTitle, nuphosToolName } from '@/lib/claude-code-preview/preview-agent-update'
 import {
+  TOOL_PRESENTATION,
   TOOL_PRESENTATION_FRAME,
   runtimeToolResult,
   runtimeToolOutput,
@@ -17,8 +18,14 @@ export function consumePreviewToolPresentation(
   log: ReturnType<typeof createPreviewToolLog>,
   frame: Record<string, unknown>,
 ): boolean {
-  if (frame.type !== TOOL_PRESENTATION_FRAME) return false
-  if (frame.owner !== 'runtime' || typeof frame.toolName !== 'string') return true
+  const marked =
+    frame[TOOL_PRESENTATION] === 'runtime' &&
+    ['tool-input-available', 'tool-output-available', 'tool-output-error'].includes(
+      String(frame.type),
+    )
+
+  if (frame.type !== TOOL_PRESENTATION_FRAME && !marked) return false
+  if ((!marked && frame.owner !== 'runtime') || typeof frame.toolName !== 'string') return true
   const names = runtimeOwners.get(log) ?? new Set<string>()
 
   runtimeOwners.set(log, names)
