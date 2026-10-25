@@ -58,4 +58,21 @@ class ConversationActionsTest {
         assertNull(ConversationActions.validTitle(" "))
         assertNull(ConversationActions.validTitle("x".repeat(121)))
     }
+    @Test fun desktopHrefIdentityMatchesKeyAndUnpinPreservesUnrelatedEntries() {
+        val href = JsonValue.obj("label" to JsonValue.Str("Desktop pin"), "href" to JsonValue.Str("https://nuphos.ai/teams/team/agent/s%2B%20x"))
+        val key = JsonValue.obj("key" to JsonValue.Str("agent-session:s+ x"))
+        val other = JsonValue.obj("href" to JsonValue.Str("/teams/team/plans/plan"))
+        assertEquals("s+ x", ConversationActions.favoriteSessionId(href))
+        assertTrue(ConversationActions.Favorites(listOf(href), 1).contains("s+ x"))
+        assertEquals(listOf(href, other), ConversationActions.pinnedEntries(listOf(href, other), "s+ x", "New", true))
+        assertEquals(listOf(other), ConversationActions.pinnedEntries(listOf(href, key, other), "s+ x", "New", false))
+        assertEquals("a+b", ConversationActions.favoriteSessionId(JsonValue.obj("href" to JsonValue.Str("/teams/t/agent/a+b"))))
+    }
+    @Test fun unrelatedMalformedAndEmptyFavoriteRoutesAreNotChatPins() {
+        for (href in listOf("/dashboard", "/teams/t/agent", "/teams/t/agent/", "/teams//agent/s", "/teams/t/agent/s/extra", "/teams/t/agent/%ZZ"))
+            assertNull(href, ConversationActions.favoriteSessionId(JsonValue.obj("href" to JsonValue.Str(href))))
+        val preferred = JsonValue.obj("key" to JsonValue.Str("agent-session:key"), "href" to JsonValue.Str("/teams/t/agent/href"))
+        assertEquals("key", ConversationActions.favoriteSessionId(preferred))
+    }
+
 }

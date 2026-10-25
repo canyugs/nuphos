@@ -44,6 +44,9 @@ class PinnedListFixtureDeviceTest {
     private var savedAuth: Any? = null
     private var savedAuthToken: String? = null
     private var preferences: Map<String, *> = emptyMap<String, Any>()
+    @Volatile private var holdFavorites = false
+    private val favoritesHeld = java.util.concurrent.CountDownLatch(1)
+    private val releaseFavorites = java.util.concurrent.CountDownLatch(1)
     private var entries = """[{"key":"agent-session:normal","label":"Synthetic pin"}]"""
     @Suppress("UNCHECKED_CAST") private fun state(target: Any, name: String, delegated: Boolean = true) =
         target.javaClass.getDeclaredField(name + if (delegated) "\$delegate" else "").also { it.isAccessible = true }.get(target) as MutableState<Any?>
@@ -65,6 +68,10 @@ class PinnedListFixtureDeviceTest {
             val client = OkHttpClient.Builder().addInterceptor { chain ->
                 val req = chain.request(); requests += req
                 val path = req.url.encodedPath
+                if (path == "/teams/A/favorites" && holdFavorites) {
+                    favoritesHeld.countDown()
+                    check(releaseFavorites.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                }
                 val text = when (path) {
                     "/teams/A/favorites" -> """{"revision":1,"entries":$entries}"""
                     "/agent/conversations" -> """{"conversations":${kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(AgentConversation.serializer()), if (::store.isInitialized) store.conversations else emptyList())},"hasMore":false}"""
@@ -80,6 +87,7 @@ class PinnedListFixtureDeviceTest {
             }
         }
         override fun after() {
+            releaseFavorites.countDown()
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
                 if (::store.isInitialized) store.disposeForConsent()
                 state(AiAccess, "state", false).value = savedAccess
@@ -181,4 +189,26 @@ class PinnedListFixtureDeviceTest {
         shot("loaded")
         assertTrue(requests.none { it.method != "GET" })
     }
+    @Test fun desktopHrefPinAppearsAtTopAfterAsynchronousFavoritesRead() {
+        holdFavorites = true
+        entries = """[{"href":"/teams/A/agent/outside","label":"Desktop remote pin"},{"href":"/teams/A/agent/child","label":"Desktop child pin"}]"""
+        render()
+        assertTrue(favoritesHeld.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        compose.onNodeWithText("Loading pinned agents…").assertIsDisplayed()
+        compose.onNodeWithText("Desktop remote pin").assertDoesNotExist()
+        releaseFavorites.countDown()
+        waitText("Desktop remote pin")
+        compose.onNodeWithText("Loading pinned agents…").assertDoesNotExist()
+        assertTrue(top("Synthetic child") < top("Desktop remote pin"))
+        assertTrue(top("Desktop remote pin") < top("Synthetic parent"))
+        compose.onAllNodesWithContentDescription("Pinned agent", useUnmergedTree=true).assertCountEquals(2)
+        compose.onNodeWithTag("row-more:child", useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("menu-pin:child").assertTextContains("Unpin")
+        androidx.test.espresso.Espresso.pressBack()
+        shot("desktop-href-late")
+        compose.onNodeWithText("Desktop remote pin").performClick()
+        waitText("Opened synthetic outside")
+        assertTrue(requests.none { it.method != "GET" })
+    }
+
 }

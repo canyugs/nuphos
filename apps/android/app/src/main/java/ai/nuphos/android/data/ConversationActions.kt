@@ -4,7 +4,22 @@ import java.nio.charset.StandardCharsets
 
 object ConversationActions {
     data class Favorites(val entries: List<JsonValue>, val revision: Long) {
-        fun contains(sessionId: String) = entries.any { it["key"]?.stringValue == "agent-session:$sessionId" }
+        fun contains(sessionId: String) = entries.any { favoriteSessionId(it) == sessionId }
+    }
+    /** Same explicit key / Desktop chat-href identity used by iOS SidebarFavorites. */
+    fun favoriteSessionId(entry: JsonValue): String? {
+        val key = entry["key"]?.stringValue
+        if (key?.startsWith("agent-session:") == true)
+            return key.removePrefix("agent-session:").takeIf { it.isNotBlank() }
+        return try {
+            val href = entry["href"]?.stringValue ?: return null
+            val parts = java.net.URI(href).rawPath?.split('/') ?: return null
+            if (parts.size != 5 || parts[0].isNotEmpty() || parts[1] != "teams" ||
+                parts[2].isEmpty() || parts[3] != "agent" || parts[4].isEmpty()) return null
+            java.net.URLDecoder.decode(parts[4].replace("+", "%2B"), StandardCharsets.UTF_8.name())
+                .takeIf { it.isNotBlank() }
+        } catch (_: IllegalArgumentException) { null }
+          catch (_: java.net.URISyntaxException) { null }
     }
     fun shareUrl(teamId: String, sessionId: String): String? =
         if (teamId.isEmpty() || sessionId.isEmpty()) null else "https://nuphos.ai/teams/${segment(teamId)}/agent/${segment(sessionId)}"
@@ -19,8 +34,8 @@ object ConversationActions {
     fun validTitle(value: String): String? = value.trim().takeIf { it.length in 1..120 }
     fun pinnedEntries(entries: List<JsonValue>, sessionId: String, title: String, pinned: Boolean): List<JsonValue> {
         val key = "agent-session:$sessionId"
-        val exists = entries.any { it["key"]?.stringValue == key }
-        if (!pinned) return entries.filterNot { it["key"]?.stringValue == key }
+        val exists = entries.any { favoriteSessionId(it) == sessionId }
+        if (!pinned) return entries.filterNot { favoriteSessionId(it) == sessionId }
         if (exists) return entries
         require(entries.size < 1000) { "Favorites are full." }
         return entries + JsonValue.obj("label" to JsonValue.Str(title.ifBlank { "Agent" }.take(200)), "key" to JsonValue.Str(key))
