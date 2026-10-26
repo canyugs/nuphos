@@ -413,7 +413,7 @@ describe('empty completed turns', () => {
         sendFcm: async (_project, request) => {
           fcm.push(request)
 
-          return { status: 200 }
+          return { status: 200, deadToken: false }
         },
       })
 

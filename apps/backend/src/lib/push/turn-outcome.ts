@@ -54,7 +54,7 @@ type FrameScan = {
 }
 
 function isStepBoundary(type: string): boolean {
-  return type === 'text-start' || type.startsWith('tool-') || type.startsWith('reasoning')
+  return type.startsWith('tool-') || type.startsWith('reasoning')
 }
 
 function scanFrames(frames: readonly string[]): FrameScan {
@@ -71,7 +71,10 @@ function scanFrames(frames: readonly string[]): FrameScan {
     const toolName = stringField(payload, 'toolName')
 
     if (toolCallId && toolName) toolNames.set(toolCallId, toolName)
-    if (type === 'text-delta') {
+    if (type === 'text-start') {
+      scan.finalText = ''
+      textClosed = false
+    } else if (type === 'text-delta') {
       if (textClosed) scan.finalText = ''
       textClosed = false
       scan.finalText += stringField(payload, 'delta') ?? ''

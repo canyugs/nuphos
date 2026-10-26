@@ -140,3 +140,16 @@ test('a literal mention of no response inside a real answer is retained', () => 
     }),
   ).toEqual({ kind: 'finished', text: 'The error says (no response); retry later.' })
 })
+
+test('a final text-start with zero deltas does not reuse earlier commentary', () => {
+  expect(
+    classifyTurn({
+      aborted: false,
+      frames: [
+        text('Progress already delivered.'),
+        frame({ type: 'text-start', messageId: 'empty-final', phase: 'final_answer' }),
+        complete,
+      ],
+    }),
+  ).toEqual({ kind: 'finished', text: '' })
+})
