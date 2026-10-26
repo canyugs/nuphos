@@ -1,3 +1,5 @@
+import { isEmptyTurnText } from '@/lib/claude-code-preview/empty-turn'
+
 export type TurnOutcome =
   | { kind: 'finished'; text: string }
   | { kind: 'approval'; toolName?: string }
@@ -52,7 +54,7 @@ type FrameScan = {
 }
 
 function isStepBoundary(type: string): boolean {
-  return type.startsWith('tool-') || type.startsWith('reasoning')
+  return type === 'text-start' || type.startsWith('tool-') || type.startsWith('reasoning')
 }
 
 function scanFrames(frames: readonly string[]): FrameScan {
@@ -116,7 +118,7 @@ export function classifyTurn(facts: TurnFacts): TurnOutcome | null {
     return { kind: 'approval', ...(scan.approvalTool ? { toolName: scan.approvalTool } : {}) }
   }
 
-  return { kind: 'finished', text: scan.finalText }
+  return { kind: 'finished', text: isEmptyTurnText(scan.finalText) ? '' : scan.finalText }
 }
 
 export function plainText(input: string): string {

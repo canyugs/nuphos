@@ -117,3 +117,26 @@ describe('plainText', () => {
     ).toBe('Title see docs (code) done')
   })
 })
+
+test('an explicit final text block replaces earlier commentary for notification classification', () => {
+  const outcome = classifyTurn({
+    aborted: false,
+    frames: [
+      text('Progress already delivered.'),
+      frame({ type: 'text-start', messageId: 'final', phase: 'final_answer' }),
+      text('_(no '),
+      text('response)_'),
+      complete,
+    ],
+  })
+
+  expect(outcome).toEqual({ kind: 'finished', text: '' })
+})
+test('a literal mention of no response inside a real answer is retained', () => {
+  expect(
+    classifyTurn({
+      aborted: false,
+      frames: [text('The error says (no response); retry later.'), complete],
+    }),
+  ).toEqual({ kind: 'finished', text: 'The error says (no response); retry later.' })
+})
