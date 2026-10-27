@@ -222,7 +222,7 @@ fun AgentPage(
         ) {
             when {
                 store.phase == AgentStore.Phase.Loading || store.phase == AgentStore.Phase.Idle ||
-                    (resolvingPins && settledRows.isNullOrEmpty()) ||
+                    (store.phase == AgentStore.Phase.Loaded && resolvingPins && settledRows.isNullOrEmpty()) ||
                     (store.phase == AgentStore.Phase.Loaded && store.conversations.isEmpty() && pins.isEmpty() &&
                         store.selectedTeam != null && store.search.isEmpty() && !store.archivedOnly &&
                         store.favorites == null && store.favoritesError == null) -> {
@@ -239,7 +239,8 @@ fun AgentPage(
                         title = "Couldn't load agents",
                         body = store.phaseError.orEmpty(),
                         action = "Try again",
-                        onAction = store::refresh,
+                        // A held favorites refresh must not block retrying failed history.
+                        onAction = { scope.launch { store.reload() } },
                     ) }
                 }
                 store.conversations.isEmpty() && pins.isEmpty() &&

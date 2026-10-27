@@ -72,6 +72,11 @@ class AgentsLoadingFixtureDeviceTest {
         activitySeq = JsonValue.Number(seq.toDouble()), readSeq = JsonValue.Number(1.0), unread = JsonValue.Bool(owner),
         activeRun = JsonValue.obj("streamId" to JsonValue.Str("run")),
         runtimeState = JsonValue.parse("""{"schemaVersion":2,"state":"active","phase":"working","epoch":"a","revision":2}"""))
+    @Volatile private var crossTeamPins = false
+    private val teamAPageHeld = CountDownLatch(1)
+    private val teamAPageRelease = CountDownLatch(1)
+    private val teamBPageHeld = CountDownLatch(1)
+    private val teamBPageRelease = CountDownLatch(1)
     @Volatile private var pinnedPage = false
     @Volatile private var pinFavorite = false
     private val pinPageHeld = CountDownLatch(1)
@@ -95,7 +100,10 @@ class AgentsLoadingFixtureDeviceTest {
                 val body = when (req.url.encodedPath) {
                     "/teams/A/favorites", "/teams/B/favorites" -> {
                         if (holdFavorites) { favoritesHeld.countDown(); check(favoritesRelease.await(15, TimeUnit.SECONDS)) }
-                        if (pinFavorite) """{"revision":1,"entries":[{"key":"agent-session:saved","label":"History fixture"}]}"""
+                        if (crossTeamPins) {
+                            val team = if (req.url.encodedPath.contains("/A/")) "A" else "B"
+                            """{"revision":1,"entries":[{"key":"agent-session:pin-$team","label":"Pin $team"}]}"""
+                        } else if (pinFavorite) """{"revision":1,"entries":[{"key":"agent-session:saved","label":"History fixture"}]}"""
                         else """{"revision":1,"entries":[]}"""
                     }
                     "/agent/auto-mode/bypass" -> """{"bypass":false}"""
@@ -107,7 +115,17 @@ class AgentsLoadingFixtureDeviceTest {
                         val fail = failList
                         if (holdNextList) { holdNextList = false; listHeld.countDown(); check(listRelease.await(10, TimeUnit.SECONDS)) }
                         if (req.url.queryParameter("cursor") == "following-page") { followingHeld.countDown(); check(followingRelease.await(10, TimeUnit.SECONDS)) }
-                        if (fail) { code = 503; "{}" }
+                        if (crossTeamPins) {
+                            val isPage = req.url.queryParameter("cursor") != null
+                            if (isPage) {
+                                val gate = if (team == "A") teamAPageHeld else teamBPageHeld
+                                val resume = if (team == "A") teamAPageRelease else teamBPageRelease
+                                gate.countDown(); check(resume.await(20, TimeUnit.SECONDS))
+                            }
+                            Http.json.encodeToString(AgentConversationsPage.serializer(), AgentConversationsPage(
+                                listOf(snapshot.copy(sessionId = if (isPage) "pin-$team" else "first-$team", title = if (isPage) "Pin $team" else "First $team")),
+                                nextCursor = if (isPage) null else "page-$team", hasMore = !isPage))
+                        } else if (fail) { code = 503; "{}" }
                         else if (pinnedPage && req.url.queryParameter("cursor") == "pin-page") {
                             pinPageHeld.countDown(); check(pinPageRelease.await(15, TimeUnit.SECONDS))
                             Http.json.encodeToString(AgentConversationsPage.serializer(), AgentConversationsPage(listOf(snapshot)))
@@ -142,6 +160,8 @@ class AgentsLoadingFixtureDeviceTest {
             }
         }
         override fun after() {
+            teamAPageRelease.countDown()
+            teamBPageRelease.countDown()
             pinPageRelease.countDown()
             favoritesRelease.countDown()
             release.countDown()
@@ -160,7 +180,7 @@ class AgentsLoadingFixtureDeviceTest {
         }
     }
     @get:Rule val rules: RuleChain = RuleChain.outerRule(network).around(compose)
-    private fun render(expectHistory: Boolean = true) {
+    private fun render(showHistory: Boolean = true) {
         compose.runOnIdle {
             AiAccess.grant(token)
             store = AgentStore(token, compose.activity)
@@ -172,7 +192,7 @@ class AgentsLoadingFixtureDeviceTest {
             compose.activity.setContent {
                 NuphosTheme(darkTheme = InstrumentationRegistry.getArguments().getString("fixtureDark") == "true") { CompositionLocalProvider(LocalAgentStore provides store, LocalAuthSession provides auth) {
                     val nav = rememberNavController()
-                    NavHost(nav, startDestination = "history") {
+                    if (showHistory) NavHost(nav, startDestination = "history") {
                         composable("history") { AgentPage(false, {}, nav) }
                         composable("conversation/{sessionId}") { back ->
                             ConversationScreen(back.arguments!!.getString("sessionId")!!, false, { nav.popBackStack() }, nav)
@@ -263,6 +283,38 @@ class AgentsLoadingFixtureDeviceTest {
         pinPageRelease.countDown()
         waitText("History fixture")
         compose.onNodeWithTag("conversation-row:saved").assertIsDisplayed()
+    }
+
+    @Test fun failedHistoryShowsRetryEvenWhileInitialFavoritesIsHeld() {
+        failList = true; holdFavorites = true; render()
+        compose.waitUntil(5_000) { favoritesHeld.count == 0L && store.phase == AgentStore.Phase.Failed }
+        compose.onNodeWithText("Couldn't load agents").assertIsDisplayed()
+        compose.onNodeWithText("Try again").assertIsDisplayed()
+        compose.onNodeWithText("Loading agents…").assertDoesNotExist()
+        failList = false; compose.onNodeWithText("Try again").performClick()
+        compose.waitUntil(5_000) { store.phase == AgentStore.Phase.Loaded }
+        favoritesRelease.countDown(); waitText("History fixture")
+    }
+    @Test fun newWorkspaceHydratesWithoutWaitingForOldOwnerAndOldFinallyCannotClearIt() = hydrationAcrossWorkspace(cancelOld = false)
+    @Test fun cancellingOldWorkspaceOwnerCannotClearNewOwner() = hydrationAcrossWorkspace(cancelOld = true)
+    private fun hydrationAcrossWorkspace(cancelOld: Boolean) {
+        crossTeamPins = true; render(showHistory = false)
+        lateinit var a: Job
+        compose.runOnIdle { a = work.launch { store.reload(); store.loadFavorites() } }
+        compose.waitUntil(5_000) { teamAPageHeld.count == 0L }
+        compose.runOnIdle { store.select(Team("B", "Fixture B")); work.launch { store.loadFavorites() } }
+        compose.waitUntil(5_000) { teamBPageHeld.count == 0L }
+        if (cancelOld) a.cancel()
+        teamAPageRelease.countDown()
+        compose.waitUntil(5_000) { a.isCompleted }
+        compose.runOnIdle {
+            assertTrue(store.loadingPinnedHistory)
+            assertEquals("B", store.selectedTeam?.id)
+            assertTrue(store.conversations.none { it.teamId == "A" })
+        }
+        teamBPageRelease.countDown()
+        compose.waitUntil(5_000) { store.conversations.any { it.sessionId == "pin-B" } && !store.loadingPinnedHistory }
+        compose.runOnIdle { assertTrue(store.conversations.none { it.teamId == "A" }) }
     }
 
 }

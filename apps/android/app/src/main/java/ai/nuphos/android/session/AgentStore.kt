@@ -161,15 +161,20 @@ class AgentStore(
         if (accountId == null || teamId == null || selectedTeam?.id != teamId || !hasAiAccess()) return
         prefs.edit().putStringSet("agent.folded.$accountId.$teamId", ids.toSet()).apply()
     }
-    var loadingPinnedHistory by mutableStateOf(false)
-        private set
+    private class PinnedHistoryOwner(val teamId: String, val generation: Int, val workspace: Long)
+    private var pinnedHistoryOwner by mutableStateOf<PinnedHistoryOwner?>(null)
+    val loadingPinnedHistory: Boolean
+        get() = pinnedHistoryOwner?.let {
+            it.teamId == selectedTeam?.id && it.generation == loadGeneration && it.workspace == workspaceRevision
+        } == true
     private suspend fun loadMissingPinnedHistory() {
 
         if (loadingPinnedHistory || phase != Phase.Loaded || isReloading || search.isNotEmpty() || archivedOnly) return
         val teamId = selectedTeam?.id ?: return
         val generation = loadGeneration
         val workspace = workspaceRevision
-        loadingPinnedHistory = true
+        val owner = PinnedHistoryOwner(teamId, generation, workspace)
+        pinnedHistoryOwner = owner
         try {
             // Pins can predate hundreds of rows. Stop on resolved pins or server
             // exhaustion, not an arbitrary page count; reject repeated cursors.
@@ -185,7 +190,10 @@ class AgentStore(
 
                 if (nextCursor == before) return
             }
-        } finally { loadingPinnedHistory = false }
+        } finally {
+            // A held request from an earlier scope must not clear the latest owner.
+            if (pinnedHistoryOwner === owner) pinnedHistoryOwner = null
+        }
     }
 
     suspend fun loadFavorites() {
