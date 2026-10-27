@@ -6,6 +6,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -158,7 +159,7 @@ fun AgentPage(
         if (expiry != null) { delay(((expiry - now) * 1000).toLong() + 1); statusClock = RuntimeObservation.now() }
     }
     val pins = store.pinnedShortcuts
-    var foldedIds by rememberSaveable(account, team?.id) { mutableStateOf(emptyList<String>()) }
+    var foldedIds by rememberSaveable(account, team?.id) { mutableStateOf(store.foldedThreadIds(account, team?.id).toList()) }
     val tree = remember(store.conversations, pins, foldedIds, account) {
         PinnedHistory.nest(store.conversations, pins, foldedIds.toSet(), account)
     }
@@ -246,7 +247,7 @@ fun AgentPage(
                             when (item) {
                                 is PinnedHistory.Item.Missing -> {
                                     val pin = item.shortcut
-                                    Card(Modifier.fillMaxWidth().clickable {
+                                    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxWidth().clickable {
                                         nav.navigate("conversation/${android.net.Uri.encode(pin.sessionId)}") { popUpTo("home"); launchSingleTop = true }
                                     }) {
                                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -270,6 +271,7 @@ fun AgentPage(
                                         actionBusy = store.rowActionSessionId != null,
                                         onToggle = {
                                             foldedIds = if (row.conversation.sessionId in foldedIds) foldedIds - row.conversation.sessionId else foldedIds + row.conversation.sessionId
+                                            store.saveFoldedThreadIds(account, team?.id, foldedIds.toSet())
                                         },
                                         onClick = { nav.navigate("conversation/${android.net.Uri.encode(row.conversation.sessionId)}") { popUpTo("home"); launchSingleTop = true } },
                                         selected = row.conversation.sessionId == selectedSessionId)
@@ -350,7 +352,7 @@ private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, st
     ConversationRowActions(conversation.sessionId, actions, interactions, onClick) { surface, more ->
         Surface(
             modifier = Modifier.fillMaxWidth().then(surface),
-            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.background,
+            color = if (selected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f) else MaterialTheme.colorScheme.background,
             shape = MaterialTheme.shapes.small,
         ) {
             Row(
@@ -368,7 +370,7 @@ private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, st
                     }
                 }
                 if (threads > 0) {
-                    TextButton(onClick = onToggle, modifier = Modifier.semantics {
+                    TextButton(onClick = onToggle, colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant), modifier = Modifier.semantics {
                         stateDescription = if (folded) "Collapsed" else "Expanded"
                     }) {
                         Text("$threads")
@@ -383,7 +385,7 @@ private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, st
                 } else if (status == "Unread" || HistoryStatus.unread(conversation)) {
                     Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.primary, CircleShape).semantics { stateDescription = "Unread reply" })
                 }
-                more()
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (conversation.isArchived) {
                     Icon(Icons.Outlined.Archive, contentDescription = "Archived", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
                 }
