@@ -39,6 +39,11 @@ private fun agentImageLoader(): ImageLoader = AgentImages.get(LocalContext.curre
 @Composable
 fun AgentAvatar(sessionId: String, runtime: String?, size: Dp = 36.dp) {
     val loader = agentImageLoader()
+    val preferences = ai.nuphos.android.model.BotAvatarPreferences.get(LocalContext.current)
+    if (!preferences.enabled) {
+        RuntimeMark(runtime, size, loader)
+        return
+    }
     Box(Modifier.size(size)) {
         AsyncImage(model = "file:///android_asset/bot-avatars/${BotAvatars.file(sessionId)}",
             imageLoader = loader, contentDescription = null, contentScale = ContentScale.Fit,
