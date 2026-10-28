@@ -125,4 +125,55 @@ class IncomingShareRoutingTest {
         } finally { mailbox.close() }
     }
 
+    @Test fun navigationFailureThenRetryOpensTheSameChoiceOnce() = runTest {
+        var chosen = 0
+        var opened = 0
+        val choose: suspend (Long, ComposerDrafts.Key) -> Boolean = { _, _ -> chosen++; true }
+        try {
+            openSharedNewDraft(share, key, { true }, choose, { throw IllegalStateException("No navigation host") }, noRelease)
+            fail("Expected navigation failure")
+        } catch (_: IllegalStateException) { }
+        // The retry sees the choice already published for the current draft and only navigates.
+        assertTrue(openSharedNewDraft(share.copy(destination = key), key, { true }, choose, { opened++ }, noRelease))
+        assertEquals(1, chosen); assertEquals(1, opened)
+    }
+
+    @Test fun storageFailureRetryKeepsTextAndFilesAndConsumesOnce() = runTest {
+        val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+        val mailbox = IncomingShares(ioDispatcher = dispatcher, uiDispatcher = dispatcher)
+        try {
+            mailbox.bindAccount("account")
+            val id = mailbox.begin("account")!!
+            val file = ai.nuphos.android.model.ComposerAttachment(name = "fixture.txt",
+                kind = ai.nuphos.android.model.ComposerAttachment.Kind.File("abc".toByteArray(), "text/plain"))
+            mailbox.loaded(id, "Keep my note", listOf(file))
+            mailbox.choose(id, key)
+            mailbox.failed(id, "Could not save this share.", retryable = true); mailbox.awaitIdle()
+            assertTrue(mailbox.state.value!!.retryable)
+            mailbox.retry(id); mailbox.awaitIdle()
+            val restored = mailbox.state.value!!
+            assertEquals(id, restored.id)
+            assertNull(restored.error); assertNull(restored.destination); assertFalse(restored.retryable)
+            assertEquals("Keep my note", restored.text)
+            assertEquals(listOf(file.id), restored.attachments.map { it.id })
+            assertTrue(mailbox.choose(id, key))
+            assertTrue(mailbox.consumed(id, key, restored.text, restored.attachments))
+            assertFalse(mailbox.consumed(id, key, restored.text, restored.attachments))
+            assertEquals("Keep my note", mailbox.text(key))
+        } finally { mailbox.close() }
+    }
+
+    @Test fun invalidInputCannotBeRetried() = runTest {
+        val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
+        val mailbox = IncomingShares(ioDispatcher = dispatcher, uiDispatcher = dispatcher)
+        try {
+            mailbox.bindAccount("account")
+            val id = mailbox.begin("account")!!
+            mailbox.failed(id, "Could not read this share."); mailbox.awaitIdle()
+            mailbox.retry(id); mailbox.awaitIdle()
+            assertEquals("Could not read this share.", mailbox.state.value?.error)
+            assertFalse(mailbox.choose(id, key))
+        } finally { mailbox.close() }
+    }
+
 }

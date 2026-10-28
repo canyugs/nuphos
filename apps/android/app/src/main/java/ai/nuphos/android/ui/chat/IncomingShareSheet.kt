@@ -36,10 +36,11 @@ fun IncomingShareSheet(nav: NavHostController) {
     val workspaceRevision = store.workspaceRevision
     val generation = auth.generation
     var routingError by remember(request.id, team?.id) { mutableStateOf<String?>(null) }
+    var routeAttempt by remember(request.id) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
     // Choosing publishes destination; it must not cancel the same effect before navigation resumes.
-    LaunchedEffect(account, generation, request.id, request.loading, request.error, request.destination, team?.id, workspaceRevision, bound) {
+    LaunchedEffect(account, generation, request.id, request.loading, request.error, request.destination, team?.id, workspaceRevision, bound, routeAttempt) {
         if (!bound || team == null || !mailbox.isBound(account)) return@LaunchedEffect
         val key = ComposerDrafts.Key(account, team.id, ComposerDrafts.Destination.NewChat)
         fun current() = auth.generation == generation && auth.user?.id == account && auth.aiAllowed &&
@@ -61,12 +62,19 @@ fun IncomingShareSheet(nav: NavHostController) {
     LaunchedEffect(request.id) { delay(SLOW_SHARE_MILLIS); slow = true }
     if (problem == null && !slow) return
     AlertDialog(
-        onDismissRequest = { mailbox.cancel(request.id) },
+        // Back and outside taps keep the share; only Cancel share discards it.
+        onDismissRequest = {},
         title = { Text(if (problem == null) "Preparing draft" else "Could not open draft") },
         text = { Text(problem ?: if (request.loading) "Preparing shared content…" else "Opening your new draft. Nothing has been sent.") },
         confirmButton = {
-            if (team == null && store.teamsPhase == AgentStore.Phase.Failed)
-                TextButton(onClick = { scope.launch { store.loadTeams() } }) { Text("Retry") }
+            // Retry reuses the same share and its retained files; invalid input can only be cancelled.
+            val retry: (() -> Unit)? = when {
+                request.error != null -> if (request.retryable) ({ mailbox.retry(request.id) }) else null
+                routingError != null -> ({ routingError = null; routeAttempt++ })
+                team == null && store.teamsPhase == AgentStore.Phase.Failed -> ({ scope.launch { store.loadTeams() } })
+                else -> null
+            }
+            if (retry != null) TextButton(onClick = retry) { Text("Retry") }
         },
         dismissButton = { TextButton(onClick = { mailbox.cancel(request.id) }) { Text("Cancel share") } },
     )

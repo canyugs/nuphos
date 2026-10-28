@@ -97,9 +97,15 @@ internal class IncomingShareMailbox(private val disk: ShareDraftStore? = null, p
         mutable.value = current.copy(text = text, attachments = attachments, loading = false)
         return true
     }
-    fun failed(id: Long, error: String) {
+    fun failed(id: Long, error: String, retryable: Boolean = false) {
         val current = mutable.value ?: return
-        if (current.id == id) mutable.value = current.copy(loading = false, error = error, destination = null)
+        if (current.id == id) mutable.value = current.copy(loading = false, error = error, destination = null, retryable = retryable)
+    }
+    fun retry(id: Long): Boolean {
+        val current = mutable.value ?: return false
+        if (current.id != id || current.loading || current.error == null || !current.retryable) return false
+        mutable.value = current.copy(error = null, retryable = false, destination = null)
+        return true
     }
     fun bindAccount(accountId: String) {
         val changed = journal.drafts.any { it.address.account != accountId } ||
