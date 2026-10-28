@@ -1,42 +1,16 @@
 import Foundation
 
-/// Account-scoped unsent drafts. Disk writes finish before returning to the composer.
+/// Unsent composer text per conversation, kept while the app runs and dropped on sign-out.
 enum ComposerDrafts {
-    static var account: String?
-    static var storage: SharedDraftStore?
-    static var error: String?
-    static var revision = UUID()
-    static func signIn(account: String) {
-        let store = SharedDraftStore.applicationGroup()
-        if self.account != account {
-            try? store?.revoke(account: nil)
-            drafts = [:]; revision = UUID()
-        }
-        self.account = account
-        storage = store
-    }
-    static func selectTeam(_ team: String) {
-        guard let account else { return }
-        do { _ = try storage?.activate(account: account, team: team) }
-        catch { self.error = error.localizedDescription }
-    }
     private static var drafts: [String: String] = [:]
 
     private static func key(_ team: String, _ session: String) -> String { "\(team)/\(session)" }
 
     static func text(team: String, session: String) -> String {
-        if let account, let storage {
-            do { return try storage.composer(account: account, team: team, session: session)?.text ?? "" }
-            catch { self.error = error.localizedDescription }
-        }
-        return drafts[key(team, session)] ?? ""
+        drafts[key(team, session)] ?? ""
     }
 
     static func set(_ text: String, team: String, session: String) {
-        if let account, let storage {
-            do { try storage.updateText(account: account, team: team, session: session, text: text) }
-            catch { self.error = error.localizedDescription }
-        }
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             drafts.removeValue(forKey: key(team, session))
         } else {
@@ -56,14 +30,6 @@ enum ComposerDrafts {
     }
 
     static func clear() {
-        if let storage = storage ?? SharedDraftStore.applicationGroup() {
-            do {
-                let currentScope = try storage.scope()
-                let owner = account ?? currentScope?.account
-                try storage.revoke(account: owner)
-            } catch { self.error = error.localizedDescription }
-        }
         drafts = [:]
-        revision = UUID()
     }
 }

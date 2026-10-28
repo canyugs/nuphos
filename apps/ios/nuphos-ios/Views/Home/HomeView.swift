@@ -9,7 +9,6 @@ struct HomeView: View {
 
     @State private var page: HomePage = Self.initialPage
     @State private var showProfile = false
-    @State private var showSharedDrafts = false
     @State private var isSearching = false
     @State private var titleCollapsed = false
     @State private var store: AgentStore?
@@ -52,11 +51,6 @@ struct HomeView: View {
                 }
                 .sharedBackgroundVisibility(.hidden)
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Shared drafts", systemImage: "tray") { showSharedDrafts = true }
-                        .disabled(store?.selectedTeam == nil)
-                }
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 // Each control gets its own glass group
                 // (ToolbarSpacer(.fixed) splits groups, per the toolbar docs).
                 if page == .agent, store != nil {
@@ -106,14 +100,6 @@ struct HomeView: View {
             #if DEBUG
             .onAppear { if ProcessInfo.processInfo.arguments.contains("-show-app-icons") { showProfile = true } }
             #endif
-            .sheet(isPresented: $showSharedDrafts) {
-                if let team = store?.selectedTeam?.id {
-                    SharedDraftsSheet(account: user.id, team: team) {
-                        page = .agent; openChat = nil
-                        NotificationCenter.default.post(name: ComposerDrafts.imported, object: team)
-                    }
-                }
-            }
             .sheet(isPresented: $showProfile) {
                 ProfileSheet(user: user)
             }
@@ -157,7 +143,11 @@ struct HomeView: View {
             if token == nil, CommandLine.arguments.contains("-preview-home") { token = "" }
             #endif
             if store == nil, let token {
+                #if DEBUG && targetEnvironment(simulator)
+                store = AgentStore(token: token, loadsHistory: !CommandLine.arguments.contains("-share-verification"))
+                #else
                 store = AgentStore(token: token)
+                #endif
                 store?.me = ChatMessage.Sender(name: user.name, avatarURL: user.avatarURL)
                 plans = PlansStore(token: token)
                 connectors = ConnectorsStore(token: token)
@@ -173,11 +163,7 @@ struct HomeView: View {
             UIEventLog.pageTransition(from: oldPage.rawValue, to: newPage.rawValue)
             Analytics.shared.screen(newPage.rawValue, teamID: store?.selectedTeam?.id)
         }
-        .onChange(of: session.aiConsentAccepted) { _, accepted in
-            ComposerDrafts.selectTeam(accepted ? store?.selectedTeam?.id ?? "" : "")
-        }
-        .onChange(of: store?.selectedTeam?.id, initial: true) { _, teamID in
-            ComposerDrafts.selectTeam(session.aiConsentAccepted ? teamID ?? "" : "")
+        .onChange(of: store?.selectedTeam?.id) { _, teamID in
             Analytics.shared.screen(page.rawValue, teamID: teamID)
         }
         .onChange(of: PushNotifications.shared.pendingTarget, initial: true) { _, target in

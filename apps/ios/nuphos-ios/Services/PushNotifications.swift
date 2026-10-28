@@ -80,6 +80,7 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
     /// Called once a session is signed in: asks for permission (the system
     /// only prompts the first time) and registers with APNs.
     func activate(authToken: String) async {
+        #if !NUPHOS_SHARE_EXTENSION
         self.authToken = authToken
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         guard granted else { return }
@@ -87,6 +88,7 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
         UIApplication.shared.registerForRemoteNotifications()
         #endif
         await upload()
+        #endif
     }
 
     /// Unregisters this device before the session token is discarded, so a

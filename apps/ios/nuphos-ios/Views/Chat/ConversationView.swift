@@ -2,9 +2,11 @@ import SwiftUI
 
 /// The chat screen: transcript rows, activity, approvals, and the composer.
 struct ConversationView: View {
+    @Environment(AuthSession.self) private var auth
     @Bindable var session: ChatSession
     /// First message for a brand-new chat, sent once the view appears.
     var initialPrompt: ComposerSubmission?
+    var temporaryDirectory: URL = FileManager.default.temporaryDirectory
     /// Top-level page that presented this chat, used by navigation diagnostics.
     var sourcePage = HomePage.agent.rawValue
 
@@ -258,7 +260,6 @@ struct ConversationView: View {
             }
             ChatComposerBar(
                 text: $draft,
-                draftSession: session.sessionId,
                 isStreaming: session.isStreaming,
                 canSend: session.canSubmit,
                 canStop: session.canCancel,
@@ -280,6 +281,8 @@ struct ConversationView: View {
                     }
                 ),
                 voiceTeamId: session.teamId,
+                voiceToken: auth.token,
+                temporaryDirectory: temporaryDirectory,
                 onSend: { session.send($0) },
                 onStop: { session.stop() }
             ) {
