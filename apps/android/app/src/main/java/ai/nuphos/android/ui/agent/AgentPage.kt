@@ -358,7 +358,7 @@ internal fun ConversationTreeRow(row: ConversationNesting.Row, pinned: Boolean, 
 }
 
 @Composable
-private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, status: String?, threads: Int = 0, folded: Boolean = false, onToggle: () -> Unit = {}, onClick: () -> Unit, onUnlink: (() -> Unit)? = null, unlinking: Boolean = false, onWatch: (() -> Unit)? = null, watchBusy: Boolean = false, selected: Boolean = false, interactions: ConversationRowInteractions = remember { ConversationRowInteractions() }, onPin: (() -> Unit)? = null, pinEnabled: Boolean = true, onArchive: (() -> Unit)? = null, actionBusy: Boolean = false) {
+internal fun ConversationRow(conversation: AgentConversation, pinned: Boolean, status: String?, threads: Int = 0, folded: Boolean = false, onToggle: () -> Unit = {}, onClick: () -> Unit, onUnlink: (() -> Unit)? = null, unlinking: Boolean = false, onWatch: (() -> Unit)? = null, watchBusy: Boolean = false, selected: Boolean = false, interactions: ConversationRowInteractions = remember { ConversationRowInteractions() }, onPin: (() -> Unit)? = null, pinEnabled: Boolean = true, onArchive: (() -> Unit)? = null, actionBusy: Boolean = false) {
     val actions = buildList {
         if (onWatch != null) add(ConversationRowAction("watch", if (conversation.watching == true) "Unwatch" else "Watch",
             if (conversation.watching == true) Icons.Outlined.NotificationsOff else Icons.Outlined.Notifications, !watchBusy && !actionBusy, onWatch))
@@ -383,8 +383,8 @@ private fun ConversationRow(conversation: AgentConversation, pinned: Boolean, st
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(conversation.displayTitle, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        RuntimeMark(conversation.agentRuntime)
-                        Text(meta(conversation, status?.takeUnless { it == "Unread" }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (ai.nuphos.android.ui.components.botAvatarsEnabled()) RuntimeMark(conversation.agentRuntime)
+                        Text(meta(conversation, status?.takeUnless { it == "Unread" }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 if (threads > 0) {
@@ -432,7 +432,7 @@ private fun meta(conversation: AgentConversation, status: String?): String {
     conversation.activitySource?.origin?.takeIf { it != "nuphos" && it != "unknown" }?.let {
         parts += it.replaceFirstChar { c -> c.uppercase() }
     }
-    conversation.runtimeLabel?.takeIf { it.isNotBlank() }?.let { parts += it }
+    parts += ai.nuphos.android.model.RuntimeIdentity.detail(conversation.agentRuntime, conversation.runtimeLabel)
     return parts.joinToString(" · ")
 }
 
