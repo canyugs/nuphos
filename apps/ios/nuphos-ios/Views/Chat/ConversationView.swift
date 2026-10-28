@@ -258,6 +258,7 @@ struct ConversationView: View {
             }
             ChatComposerBar(
                 text: $draft,
+                draftSession: session.sessionId,
                 isStreaming: session.isStreaming,
                 canSend: session.canSubmit,
                 canStop: session.canCancel,

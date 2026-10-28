@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 /// the input on its own line, attachment tiles, then `+` and send/stop.
 struct ChatComposerBar<Controls: View>: View {
     @Binding var text: String
+    var draftSession: String? = nil
     var isStreaming = false
     var canSend = true
     var canStop = false
@@ -30,6 +31,9 @@ struct ChatComposerBar<Controls: View>: View {
     /// page lowers this composer along with its own keyboard.
     @State private var ownsKeyboard = false
     @State private var attachments: [ComposerAttachment] = []
+    @State private var loadedDraftKey: ComposerDraftKey?
+    @State private var draftGeneration = UUID()
+    @State private var filePickerGeneration: UUID?
     @State private var showPhotos = false
     @State private var showFiles = false
     @State private var attachmentError: String?
@@ -51,6 +55,26 @@ struct ChatComposerBar<Controls: View>: View {
     private var mentionDevices: [CredentialCatalog.Item] {
         guard let query = mentionQuery, let mentions else { return [] }
         return Array(mentions.devices.filter { SessionMention.matches($0.label, query) }.prefix(3))
+    }
+
+    private var draftKey: ComposerDraftKey? {
+        guard let account = session.user?.id, let team = voiceTeamId, let draftSession else { return nil }
+        return ComposerDraftKey(account: account, team: team, session: draftSession)
+    }
+    private func restoreAttachments() {
+        draftGeneration = UUID(); cancelDictation(); showPhotos = false; showFiles = false
+        loadedDraftKey = nil
+        guard let key = draftKey else { attachments = []; return }
+        do {
+            text = ComposerDrafts.text(team: key.team, session: key.session)
+            attachments = try ComposerDrafts.attachments(for: key); loadedDraftKey = key
+        }
+        catch { attachmentError = error.localizedDescription }
+    }
+    private func persistAttachments() {
+        guard let key = draftKey, key == loadedDraftKey else { return }
+        do { try ComposerDrafts.saveAttachments(attachments, text: text, key: key) }
+        catch { attachmentError = error.localizedDescription }
     }
 
     var body: some View {
@@ -155,6 +179,17 @@ struct ChatComposerBar<Controls: View>: View {
             let found = await mentions.search(query)
             if !Task.isCancelled { mentionResults = found }
         }
+        .task(id: draftKey) { restoreAttachments() }
+        .onChange(of: attachments) { _, _ in persistAttachments() }
+        .onReceive(NotificationCenter.default.publisher(for: ComposerDrafts.imported)) { notification in
+            guard let team = notification.object as? String, team == voiceTeamId, draftSession == "new" else { return }
+            text = ComposerDrafts.text(team: team, session: "new")
+            restoreAttachments()
+            focused = true
+        }
+        .onChange(of: text) { _, _ in
+            if let message = ComposerDrafts.error { attachmentError = message; ComposerDrafts.error = nil }
+        }
         .onDisappear(perform: cancelDictation)
         .onChange(of: focused) { _, focused in if focused { ownsKeyboard = true } }
         #if canImport(UIKit)
@@ -172,14 +207,19 @@ struct ChatComposerBar<Controls: View>: View {
         .onChange(of: photoItems) { _, items in
             guard !items.isEmpty else { return }
             photoItems = []
+            let generation = draftGeneration
             Task {
                 for item in items {
-                    if let attachment = await ComposerAttachment.load(item) { attachments.append(attachment) }
+                    let attachment = await ComposerAttachment.load(item)
+                    guard generation == draftGeneration else { return }
+                    if let attachment { attachments.append(attachment) }
                     else { attachmentError = "Couldn’t prepare this photo or video. Try a different one or choose it from Files." }
                 }
             }
         }
+        .onChange(of: showFiles) { _, shown in if shown { filePickerGeneration = draftGeneration } }
         .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard filePickerGeneration == draftGeneration else { return }
             if case .success(let urls) = result {
                 attachments.append(contentsOf: urls.compactMap(ComposerAttachment.load(fileURL:)))
             }
@@ -442,14 +482,17 @@ struct ChatComposerBar<Controls: View>: View {
     /// Copied files and images become attachments; copied text, which has
     /// no name, goes into the draft as if it were pasted there.
     private func paste(_ providers: [NSItemProvider]) {
+        let generation = draftGeneration
         Task {
             for provider in providers {
                 if PastedFile.isText(provider),
                    let string = await withCheckedContinuation({ continuation in
                        _ = provider.loadTransferable(type: String.self) { continuation.resume(returning: try? $0.get()) }
                    }) {
+                    guard generation == draftGeneration else { return }
                     text += string
                 } else if let attachment = await ComposerAttachment.load(pasted: provider) {
+                    guard generation == draftGeneration else { return }
                     attachments.append(attachment)
                 } else {
                     attachmentError = "Couldn’t paste this item. Try choosing it from Files."
@@ -514,6 +557,7 @@ struct ChatComposerBar<Controls: View>: View {
         guard !preparingSubmission, canSend, hasPayload, allowsAttachments || attachments.isEmpty else { return }
         let draft = ComposerSubmission(text: text.trimmingCharacters(in: .whitespacesAndNewlines), attachments: attachments)
         preparingSubmission = true
+        let generation = draftGeneration
         Task {
             defer { preparingSubmission = false }
             do {
@@ -537,7 +581,7 @@ struct ChatComposerBar<Controls: View>: View {
                     }
                     return submission
                 }.value
-                guard canSend, allowsAttachments || submission.attachments.isEmpty else { return }
+                guard generation == draftGeneration, canSend, allowsAttachments || submission.attachments.isEmpty else { return }
                 text = ""
                 attachments.removeAll { attachment in draft.attachments.contains { $0.id == attachment.id } }
                 focused = false

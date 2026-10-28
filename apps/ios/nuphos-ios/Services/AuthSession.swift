@@ -20,7 +20,9 @@ final class AuthSession {
     private(set) var state: State = .restoring {
         didSet {
             switch state {
-            case .signedIn(let user): Analytics.shared.identify(user)
+            case .signedIn(let user):
+                ComposerDrafts.signIn(account: user.id)
+                Analytics.shared.identify(user)
             case .signedOut: Analytics.shared.reset()
             case .restoring, .signingIn: break
             }
@@ -243,6 +245,7 @@ final class AuthSession {
     }
 
     private func clearToken() {
+        ComposerDrafts.clear()
         Keychain.delete(Self.tokenKey)
         token = nil
         aiConsentAccepted = false
