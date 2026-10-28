@@ -244,7 +244,7 @@ private struct ShareConversationView: View {
                     ContentUnavailableView {
                         Label("Sharing unavailable", systemImage: "person.crop.circle.badge.exclamationmark")
                     } description: { Text(error) } actions: {
-                        if !model.identityInvalidated { Button("Try again") { Task { await model.restore() } } }
+                        if model.loaded && !model.identityInvalidated { Button("Try again") { Task { await model.restore() } } }
                     }
                 } else { ProgressView("Preparing conversation…") }
             }
