@@ -139,20 +139,32 @@ class ProfileLayoutDeviceTest {
             var busy by remember { mutableStateOf(false) }
             NuphosTheme {
                 ai.nuphos.android.ui.profile.EditProfileForm(NuphosUser("fixture", name = "Synthetic", username = "synthetic"), busy, null,
-                    onDismiss = { calls += "cancel-edit" }, onSave = { name, username, avatar ->
+                    onDismiss = { calls += "cancel-edit" }, onChoosePhoto = { calls += "choose-photo" }, onRemovePhoto = { calls += "remove-photo" }, onSave = { name, username, avatar ->
                         calls += "save:$name:$username:$avatar"; busy = true
                     })
             }
         }
         compose.onNodeWithText("Save").performClick()
         compose.onNodeWithText("Saving…").assertIsNotEnabled()
+        compose.onNodeWithText("Choose photo").assertIsNotEnabled()
         compose.onNodeWithText("Cancel").assertIsNotEnabled()
         assertEquals(listOf("save:Synthetic:synthetic:"), calls)
+    }
+    @Test fun editFormChoosesPhotoWithoutSavingProfile() {
+        compose.setContent { NuphosTheme {
+            ai.nuphos.android.ui.profile.EditProfileForm(NuphosUser("fixture", name = "Synthetic", username = "synthetic"), false, null,
+                onDismiss = {}, onChoosePhoto = { calls += "choose-photo" },
+                onRemovePhoto = { calls += "remove-photo" }, onSave = { _, _, _ -> calls += "save" })
+        } }
+        compose.onNodeWithText("Choose photo").performClick()
+        compose.onNodeWithText("Profile image URL (optional)").assertDoesNotExist()
+        compose.onNodeWithText("Remove photo").assertDoesNotExist()
+        assertEquals(listOf("choose-photo"), calls)
     }
     @Test fun editFormRejectsEmptyNameAndCancelDoesNotSave() {
         compose.setContent { NuphosTheme {
             ai.nuphos.android.ui.profile.EditProfileForm(NuphosUser("fixture", name = "Synthetic", username = "synthetic"), false, null,
-                onDismiss = { calls += "cancel-edit" }, onSave = { _, _, _ -> calls += "save" })
+                onDismiss = { calls += "cancel-edit" }, onChoosePhoto = { calls += "choose-photo" }, onRemovePhoto = { calls += "remove-photo" }, onSave = { _, _, _ -> calls += "save" })
         } }
         compose.onNodeWithText("Name").performTextClearance()
         compose.onNodeWithText("Save").assertIsNotEnabled()
@@ -164,7 +176,7 @@ class ProfileLayoutDeviceTest {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
                 ai.nuphos.android.ui.profile.EditProfileForm(NuphosUser("fixture", name = "Synthetic long profile name for layout", username = "synthetic"), false, "Synthetic save failure",
-                    onDismiss = {}, onSave = { _, _, _ -> calls += "save" })
+                    onDismiss = {}, onChoosePhoto = {}, onRemovePhoto = {}, onSave = { _, _, _ -> calls += "save" })
             }
         } }
         compose.onNodeWithText("Save").assertIsDisplayed()
