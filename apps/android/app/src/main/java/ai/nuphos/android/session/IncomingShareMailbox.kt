@@ -15,7 +15,7 @@ internal class IncomingShareMailbox(private val disk: ShareDraftStore? = null, p
     private fun source(file: ComposerAttachment) = (file.kind as? ComposerAttachment.Kind.RetainedFile)?.source
     private var sequence = maxOf(now(), journal.pending?.id ?: 0L)
     private val mutable = MutableStateFlow(journal.pending?.let {
-        // A choice interrupted before consumption must be explicitly selected and authorized again.
+        // An interrupted choice must be resolved against fresh account/workspace state.
         Pending(it.id, it.account, it.text, disk?.restore(it.blobs).orEmpty(), loading = false)
     })
     val state = mutable.asStateFlow()
@@ -121,6 +121,11 @@ internal class IncomingShareMailbox(private val disk: ShareDraftStore? = null, p
         if (current.id != id || current.loading || current.error != null || current.accountId != key.accountId) return false
         mutable.value = current.copy(destination = key)
         return true
+    }
+    /** Returns an unopened choice to routing without failing or dropping the share. */
+    fun release(id: Long, key: ComposerDrafts.Key) {
+        val current = mutable.value ?: return
+        if (current.id == id && current.destination == key) mutable.value = current.copy(destination = null)
     }
     fun consumed(id: Long, key: ComposerDrafts.Key, mergedText: String = "", combined: List<ComposerAttachment>? = null): Boolean {
         val current = mutable.value ?: return false

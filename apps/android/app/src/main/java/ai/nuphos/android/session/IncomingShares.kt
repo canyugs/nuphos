@@ -240,6 +240,10 @@ class IncomingShares(
         val epoch = identity.get()
         return enqueue { epoch == identity.get() && actorIdentity == epoch && it.choose(id, key) }.await()
     }
+    /** Ordered after any in-flight choice; never touches a newer share or a different destination. */
+    internal fun releaseDestination(id: Long, key: ComposerDrafts.Key) {
+        enqueue { it.release(id, key) }
+    }
     suspend fun consumed(id: Long, key: ComposerDrafts.Key, mergedText: String = "", combined: List<ComposerAttachment>? = null, onCommitted: () -> Unit = {}): Boolean {
         val epoch = identity.get()
         return enqueue { box ->
