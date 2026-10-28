@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ai.nuphos.android.model.ChatPart
-import ai.nuphos.android.model.Plan
 import ai.nuphos.android.session.ChatSession
 import ai.nuphos.android.ui.components.StatusBadge
 import ai.nuphos.android.ui.plans.PlanSteps
@@ -35,25 +34,21 @@ internal val ChatPart.Tool.planId: String?
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun InlinePlanCard(planId: String, session: ChatSession) {
-    var plan by remember(planId) { mutableStateOf<Plan?>(null) }
-    var error by remember(planId) { mutableStateOf<String?>(null) }
-    var busy by remember(planId) { mutableStateOf(false) }
-    var revise by remember(planId) { mutableStateOf(false) }
-    var reason by remember(planId) { mutableStateOf("") }
+    val state = remember(planId, session) { InlinePlanState() }
+    val plan = state.plan
+    val error = state.error
+    val busy = state.busy
+    var revise by remember(planId, session) { mutableStateOf(false) }
+    var reason by remember(planId, session) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(planId) {
-        while (true) {
-            try { val p = session.plan(planId); plan = p; error = null; if (p.status !in ACTIVE) break }
-            catch (e: Exception) { if (plan == null) error = e.message ?: "Couldn't load the plan." ; if (plan == null) break }
-            delay(1500)
-        }
+    LaunchedEffect(planId, session) {
+        while (state.refresh { session.plan(planId) }) delay(1500)
     }
-    fun run(op: suspend () -> Plan) {
-        if (busy) return
-        busy = true
+    fun decide(approve: Boolean) {
         scope.launch {
-            try { plan = op(); error = null } catch (e: Exception) { error = e.message ?: "Action failed. Try again." }
-            finally { busy = false }
+            state.decide(session.readOnly, session.isStreaming, approve) { id ->
+                if (approve) session.approvePlan(id) else session.rejectPlan(id)
+            }
         }
     }
     Surface(
@@ -100,11 +95,15 @@ internal fun InlinePlanCard(planId: String, session: ChatSession) {
             if (p.status == "proposed" && !session.readOnly) {
                 val enabled = !busy && !session.isStreaming
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = enabled, onClick = { run { session.approvePlan(p.id) } }) { Text("Approve") }
+                    Button(enabled = enabled && p.isReadyForApproval, onClick = { decide(approve = true) }) { Text("Approve") }
                     OutlinedButton(enabled = enabled, onClick = { revise = true }) { Text("Request changes") }
-                    OutlinedButton(enabled = enabled, onClick = { run { session.rejectPlan(p.id) } },
+                    OutlinedButton(enabled = enabled, onClick = { decide(approve = false) },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Reject") }
                 }
+            }
+            if (p.status == "proposed" && !p.isReadyForApproval) {
+                Text("The agent is still drafting this plan. Approval is available once the steps, cost and risks are complete.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (error != null) Text(error.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
@@ -114,5 +113,3 @@ internal fun InlinePlanCard(planId: String, session: ChatSession) {
         confirmButton = { TextButton(enabled = reason.isNotBlank(), onClick = { session.requestPlanChanges(reason); reason = ""; revise = false }) { Text("Send") } },
         dismissButton = { TextButton(onClick = { revise = false }) { Text("Cancel") } })
 }
-
-private val ACTIVE = setOf("proposed", "approved", "executing")
