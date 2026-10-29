@@ -40,6 +40,20 @@ final class AuthSession {
         return nil
     }
 
+    func restoreForSharing(_ lease: SharedShareSession.Record) async throws {
+        try SharedShareSession.validate(lease)
+        guard ["https", "http"].contains(lease.backend.scheme?.lowercased() ?? ""),
+              lease.backend.host != nil, lease.backend.user == nil, lease.backend.password == nil else { throw SharedShareSession.Failure.identity }
+        NuphosAPI.sharedSessionBaseURL = lease.backend
+        let user = try await NuphosAPI.currentUser(token: lease.token)
+        try SharedShareSession.validate(lease)
+        guard user.id == lease.accountID else { throw SharedShareSession.Failure.identity }
+        token = lease.token
+        await loadAIConsent()
+        guard aiConsentAccepted else { throw SharedShareSession.Failure.unavailable }
+        state = .signedIn(user)
+    }
+
     // MARK: - Launch
 
     /// Restores a saved session. A token the backend no longer honours is
@@ -56,7 +70,7 @@ final class AuthSession {
         #else
         let previewFixture: String? = nil
         #endif
-        if CommandLine.arguments.contains("-preview-home") || previewFixture != nil {
+        if !CommandLine.arguments.contains("-share-verification") && (CommandLine.arguments.contains("-preview-home") || previewFixture != nil) {
             if previewFixture != nil {
                 URLProtocol.registerClass(PreviewTransport.self)
                 token = "preview-only"
@@ -83,6 +97,7 @@ final class AuthSession {
         do {
             let user = try await NuphosAPI.currentUser(token: saved)
             await loadAIConsent()
+            try? SharedShareSession.publishLogin(token: saved, accountID: user.id, backend: NuphosAPI.baseURL)
             state = .signedIn(user)
         } catch NuphosAPI.Failure.unauthorized {
             clearToken()
@@ -127,6 +142,7 @@ final class AuthSession {
             try Keychain.write(token, for: Self.tokenKey)
             self.token = token
             await loadAIConsent()
+            try? SharedShareSession.publishLogin(token: token, accountID: user.id, backend: NuphosAPI.baseURL)
             state = .signedIn(user)
             Analytics.shared.track("login")
         } catch {
@@ -243,6 +259,7 @@ final class AuthSession {
     }
 
     private func clearToken() {
+        SharedShareSession.revoke()
         Keychain.delete(Self.tokenKey)
         token = nil
         aiConsentAccepted = false
@@ -267,7 +284,9 @@ final class AuthSession {
 final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
-            #if os(macOS)
+            #if NUPHOS_SHARE_EXTENSION
+            return ASPresentationAnchor()
+            #elseif os(macOS)
             return NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first ?? ASPresentationAnchor()
             #else
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }

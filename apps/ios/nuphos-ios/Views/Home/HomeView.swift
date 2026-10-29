@@ -148,7 +148,11 @@ struct HomeView: View {
             if token == nil, CommandLine.arguments.contains("-preview-home") { token = "" }
             #endif
             if store == nil, let token {
+                #if DEBUG && targetEnvironment(simulator)
+                store = AgentStore(token: token, loadsHistory: !CommandLine.arguments.contains("-share-verification"))
+                #else
                 store = AgentStore(token: token)
+                #endif
                 store?.me = ChatMessage.Sender(name: user.name, avatarURL: user.avatarURL)
                 plans = PlansStore(token: token)
                 connectors = ConnectorsStore(token: token)
