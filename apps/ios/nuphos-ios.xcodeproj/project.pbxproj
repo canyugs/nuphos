@@ -7,10 +7,150 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+ ABC100000000000000000002 = {isa = PBXBuildFile; productRef = 000000000000000000000201; };
+ ABC100000000000000000001 = {isa = PBXBuildFile; productRef = 000000000000000000000211; };
+ ABC100000000000000000000 = {isa = PBXBuildFile; productRef = 000000000000000000000221; };
 		000000000000000000000222 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000221 /* PostHog */; };
 		000000000000000000000212 /* ChatLayout in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000211 /* ChatLayout */; };
 		000000000000000000000202 /* MarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000201 /* MarkdownView */; };
 		000000000000000000000302 /* NuphosWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000000301 /* NuphosWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000000000401 /* NuphosShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NuphosShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000402 /* NuphosShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 000000000000000000000401 /* NuphosShare.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		000000000000000000000403 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000400000000;
+			remoteInfo = NuphosShare;
+		};
+		000000000000000000000404 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 000000000000000400000000 /* NuphosShare */;
+			targetProxy = 000000000000000000000403 /* PBXContainerItemProxy */;
+		};
+		000000000000000000000410 /* NuphosShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				000000000000000000000411 /* Exceptions for "NuphosShare" folder in "NuphosShare" target */,
+			);
+			path = NuphosShare;
+			sourceTree = "<group>";
+		};
+		000000000000000000000411 /* Exceptions for "NuphosShare" folder in "NuphosShare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				NuphosShare.entitlements,
+			);
+			target = 000000000000000400000000 /* NuphosShare */;
+		};
+		000000000000000400000000 /* NuphosShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000410000000 /* Build configuration list for PBXNativeTarget "NuphosShare" */;
+			buildPhases = (
+				000000000000000420000000 /* Sources */,
+				000000000000000430000000 /* Frameworks */,
+				000000000000000440000000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				000000000000000000000410 /* NuphosShare */,
+                000000000000000000000010 /* nuphos-ios */,
+                000000000000000000000320 /* Shared */,
+				000000000000000000000420 /* Shared */,
+			);
+            packageProductDependencies = (000000000000000000000221, 000000000000000000000211, 000000000000000000000201, );
+			name = NuphosShare;
+			productName = NuphosShare;
+			productReference = 000000000000000000000401 /* NuphosShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		000000000000000410000000 /* Build configuration list for PBXNativeTarget "NuphosShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000411000000 /* Debug configuration for PBXNativeTarget "NuphosShare" */,
+				000000000000000412000000 /* Release configuration for PBXNativeTarget "NuphosShare" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		000000000000000411000000 /* Debug configuration for PBXNativeTarget "NuphosShare" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphone*]" = NuphosShare/NuphosShare.entitlements;
+                APPLICATION_EXTENSION_API_ONLY = YES;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) NUPHOS_SHARE_EXTENSION $(NUPHOS_SHARE_PREVIEW_CONDITION)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6T873K59LQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NuphosShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Nuphos;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.nuphos.ios.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		000000000000000412000000 /* Release configuration for PBXNativeTarget "NuphosShare" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphone*]" = NuphosShare/NuphosShare.entitlements;
+                APPLICATION_EXTENSION_API_ONLY = YES;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) NUPHOS_SHARE_EXTENSION $(NUPHOS_SHARE_PREVIEW_CONDITION)";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				PROVISIONING_PROFILE_SPECIFIER = "Nuphos Share App Store";
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6T873K59LQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NuphosShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Nuphos;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.nuphos.ios.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		000000000000000420000000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		000000000000000430000000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+ ABC100000000000000000002,
+ ABC100000000000000000001,
+ ABC100000000000000000000,
+			);
+		};
+		000000000000000440000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +170,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				000000000000000000000302 /* NuphosWidgets.appex in Embed Foundation Extensions */,
+				000000000000000000000402 /* NuphosShare.appex */,
 			);
 			name = "Embed Foundation Extensions";
 		};
@@ -41,6 +182,8 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+        000000000000000000000451 = { isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = (Info.plist, "nuphos-ios.entitlements", ); target = 000000000000000400000000; };
+
 		000000000000000000000011 /* Exceptions for "nuphos-ios" folder in "nuphos-ios" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -63,6 +206,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				000000000000000000000011 /* Exceptions for "nuphos-ios" folder in "nuphos-ios" target */,
+                000000000000000000000451 /* Share target exclusions */,
 			);
 			path = "nuphos-ios";
 			sourceTree = "<group>";
@@ -80,6 +224,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		000000000000000000000420 /* ShareSupport */ = {
+            isa = PBXFileSystemSynchronizedRootGroup;
+            path = ShareSupport;
+            sourceTree = "<group>";
+        };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,7 +253,9 @@
 			children = (
 				000000000000000000000010 /* nuphos-ios */,
 				000000000000000000000310 /* NuphosWidgets */,
+				000000000000000000000410 /* NuphosShare */,
 				000000000000000000000320 /* Shared */,
+				000000000000000000000420 /* ShareSupport */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -114,6 +265,7 @@
 			children = (
 				000000000000000000000120 /* nuphos-ios.app */,
 				000000000000000000000301 /* NuphosWidgets.appex */,
+				000000000000000000000401 /* NuphosShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,10 +286,12 @@
 			);
 			dependencies = (
 				000000000000000000000304 /* PBXTargetDependency */,
+				000000000000000000000404 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* nuphos-ios */,
 				000000000000000000000320 /* Shared */,
+				000000000000000000000420 /* ShareSupport */,
 			);
 			name = "nuphos-ios";
 			packageProductDependencies = (
@@ -210,6 +364,7 @@
 			targets = (
 				000000000000000100000000 /* nuphos-ios */,
 				000000000000000200000000 /* NuphosWidgets */,
+				000000000000000400000000 /* NuphosShare */,
 			);
 		};
 /* End PBXProject section */
