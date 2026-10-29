@@ -7,6 +7,3 @@ swiftc nuphos-ios/Services/BotAvatars.swift tests/BotAvatarTests.swift nuphos-io
 "$test_dir/runtime-tests"
 bash tests/analytics.sh
 bash tests/auth-session.sh
-
-swiftc nuphos-ios/Services/Chat/JSONValue.swift ShareSupport/SharedShareSession.swift tests/ShareSessionLeaseTests.swift -o "$test_dir/share-lease-tests"
-"$test_dir/share-lease-tests"

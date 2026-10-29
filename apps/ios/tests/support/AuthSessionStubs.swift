@@ -11,8 +11,6 @@ enum Keychain {
 }
 
 enum NuphosAPI {
-    static let baseURL = URL(string: "https://example.invalid")!
-    nonisolated(unsafe) static var sharedSessionBaseURL: URL?
     enum Failure: LocalizedError {
         case unauthorized
         case http(Int, message: String?)
@@ -75,14 +73,4 @@ enum NuphosWeb {
     static let callbackScheme = "nuphos"
     static func loginURL() -> URL { URL(string: "https://nuphos.ai/login")! }
     static func parseCallback(_ url: URL) -> CallbackResult? { nil }
-}
-
-// Observe publication order here; storage CAS is exercised separately against Security.framework.
-enum SharedShareSession {
-    struct Record { let token: String; let accountID: String; let backend: URL }
-    enum Failure: Error { case identity, unavailable }
-    nonisolated(unsafe) static var publishedToken: String?
-    static func validate(_ record: Record) throws {}
-    static func publishLogin(token: String, accountID: String, backend: URL) throws { publishedToken = token }
-    static func revoke() { publishedToken = nil }
 }

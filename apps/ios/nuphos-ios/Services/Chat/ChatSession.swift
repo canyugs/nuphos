@@ -176,7 +176,6 @@ final class ChatSession {
 
     // MARK: - Private
 
-    @ObservationIgnored var admissionCheck: (() throws -> Void)?
     private let token: String
     private var streamTask: Task<Void, Never>?
     /// The stream only follows a run already going, so nothing is lost by closing it.
@@ -386,11 +385,9 @@ final class ChatSession {
         let progress = sending!.progress
         sending?.task = Task {
             do {
-                try await SubmissionAdmission.prepare(check: admissionCheck) {
-                    if !uploads.isEmpty {
-                        let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
-                        parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
-                    }
+                if !uploads.isEmpty {
+                    let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
+                    parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
                 }
                 sending = nil
                 let message = ChatMessage(role: .user, parts: parts)
@@ -1051,8 +1048,6 @@ final class ChatSession {
 
             do {
                 defer { applyFrames(backlog.flush()) }
-                try Task.checkCancellation()
-                try admissionCheck?()
                 let request = try AgentChatAPI.chatRequest(token: token, body: body)
                 debugLog("POST /agent/chat stream=\(options.streamId.prefix(8)) resume=\(shouldResume) from=\(resumeFrom) msgs=\(window.messages.count) base=\(window.baseIndex)")
                 for try await event in SSEClient.events(for: request) {

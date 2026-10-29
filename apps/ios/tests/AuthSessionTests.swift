@@ -5,7 +5,6 @@ import Foundation
 @main struct AuthSessionTests {
     static func main() async {
         await aLateRejectionKeepsANewSignIn()
-        await aLateSuccessKeepsANewSharedSignIn()
         await aLateRejectionAfterSignOutStaysSignedOut()
         await aLateFailureAfterSignOutShowsNoError()
         await aLateAnswerAfterSignOutStaysSignedOut()
@@ -17,7 +16,6 @@ import Foundation
     /// Starts a launch with a saved token and a cached user; the returned
     /// closure answers its `/auth/me`.
     private static func launch(_ session: AuthSession) async -> (Result<NuphosUser, Error>) -> Void {
-        SharedShareSession.publishedToken = nil
         Keychain.items = [AuthSession.tokenKey: "old"]
         LaunchCache.user = .init(user: cached, aiConsentVersion: AccountAPI.aiConsentVersion)
         var answer: CheckedContinuation<NuphosUser, Error>?
@@ -47,21 +45,6 @@ import Foundation
         precondition(session.token == "new")
         precondition(Keychain.items[AuthSession.tokenKey] == "new")
         precondition(session.user?.id == "u-new")
-        precondition(SharedShareSession.publishedToken == "new")
-    }
-
-    private static func aLateSuccessKeepsANewSharedSignIn() async {
-        let session = AuthSession()
-        let reply = await launch(session)
-        session.signOut()
-        AccountAPI.signInToken = "new"
-        try? await session.emailSignIn(email: "a@example.com", credential: "123456", password: false)
-        precondition(SharedShareSession.publishedToken == "new")
-        reply(.success(cached))
-        await settle()
-        precondition(session.token == "new")
-        precondition(session.user?.id == "u-new")
-        precondition(SharedShareSession.publishedToken == "new", "late restore must not replace the new shared sign-in")
     }
 
     private static func aLateRejectionAfterSignOutStaysSignedOut() async {
@@ -91,6 +74,5 @@ import Foundation
         await settle()
         precondition(session.state == .signedOut(error: nil))
         precondition(session.user == nil)
-        precondition(SharedShareSession.publishedToken == nil, "late restore must not resurrect shared sign-in")
     }
 }
