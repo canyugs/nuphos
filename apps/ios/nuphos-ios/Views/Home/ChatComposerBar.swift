@@ -619,7 +619,7 @@ struct ComposerChip: View {
     var body: some View {
         HStack(spacing: 5) {
             if let logo {
-                BrandLogo(name: logo, size: 13)
+                BrandLogo(name: logo, size: 16)
             } else if let systemImage {
                 Image(systemName: systemImage).font(.system(size: 11, weight: .semibold))
             }
@@ -646,6 +646,7 @@ struct BrandLogo: View {
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
