@@ -19,9 +19,9 @@ enum NuphosAPI {
     }
 
     /// Answers `/auth/me` for a token; set by each test.
-    nonisolated(unsafe) static var me: (String) async throws -> NuphosUser = { _ in throw Failure.unauthorized }
+    nonisolated(unsafe) static var me: @MainActor (String) async throws -> NuphosUser = { _ in throw Failure.unauthorized }
 
-    static func currentUser(token: String) async throws -> NuphosUser { try await me(token) }
+    @MainActor static func currentUser(token: String) async throws -> NuphosUser { try await me(token) }
 }
 
 enum AccountAPI {
