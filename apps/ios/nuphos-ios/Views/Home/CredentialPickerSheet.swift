@@ -90,7 +90,6 @@ struct CredentialPickerSheet: View {
             .refreshable { await store.loadCredentialOptions(force: true) }
         }
         .tint(Theme.heading)
-        .presentationDetents([.medium, .large])
     }
 }
 
@@ -116,7 +115,7 @@ struct ComposerControls: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose Credentials")
-        .sheet(isPresented: $showPicker) { CredentialPickerSheet(selection: $selection) }
+        .sheet(isPresented: $showPicker) { CredentialPickerSheet(selection: $selection).presentationDetents([.medium, .large]) }
         #if DEBUG
         .onAppear { if ProcessInfo.processInfo.arguments.contains("-show-iam") { showPicker = true } }
         #endif
@@ -126,7 +125,7 @@ struct ComposerControls: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose computers")
-        .sheet(isPresented: $showDevices) { CredentialPickerSheet(selection: $selection, scope: .devices) }
+        .sheet(isPresented: $showDevices) { CredentialPickerSheet(selection: $selection, scope: .devices).presentationDetents([.medium, .large]) }
 
         Button { showModes = true } label: {
             ComposerChip(title: mode.title, isActive: mode == .bypass)
@@ -144,7 +143,7 @@ struct ComposerControls: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Model settings")
-            .sheet(isPresented: $showModel) { ModelSettingsSheet(session: session) }
+            .sheet(isPresented: $showModel) { ModelSettingsSheet(session: session).presentationDetents([.medium, .large]) }
             .task(id: session.sessionId) {
                 while !Task.isCancelled {
                     await session.refreshSessionConfig()
@@ -160,7 +159,7 @@ struct ComposerControls: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Model settings")
-            .sheet(isPresented: $showModel) { ModelSettingsSheet() }
+            .sheet(isPresented: $showModel) { ModelSettingsSheet().presentationDetents([.medium, .large]) }
             .task(id: "\(store.selectedTeam?.id ?? "")/\(store.newConversationRuntime?.id ?? "")") {
                 await store.loadNewModelConfig()
             }
@@ -178,7 +177,7 @@ struct ComposerControls: View {
                 ComposerChip(logo: RuntimeInstance.Provider.logo(store.newConversationRuntime?.provider.rawValue), title: runtimeTitle, isActive: store.newConversationRuntime != nil)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Choose runtime: \(runtimeTitle)")
+            .accessibilityLabel("Choose runtime")
             .sheet(isPresented: $showRuntimes) { RuntimePickerSheet() }
             .task { await store.loadRuntimes() }
             #if DEBUG
@@ -192,7 +191,7 @@ struct ComposerControls: View {
             if store.selectedRuntimeUnavailable { return "Choose runtime" }
             return store.runtimesLoaded ? "Runtime" : "Runtime…"
         }
-        return RuntimeInstance.Provider.detail(runtime.provider.rawValue, instance: runtime.label)
+        return runtime.label
     }
 
     private func modelTitle(_ session: ChatSession) -> String {

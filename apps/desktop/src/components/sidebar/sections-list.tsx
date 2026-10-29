@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { ChevronDown, ChevronRight, Star } from 'lucide-react'
 import { Fragment } from 'react'
 
+import { t } from '../../i18n'
 import { useAgentAppearance } from '../../lib/agentAppearance'
 import { favoriteSessionId, favoriteToggleTitle } from '../../lib/sidebarPinnedChats'
 import { SIDEBAR_ITEM_SHORTCUTS } from '../../lib/teamOverviewNav'
@@ -26,9 +27,19 @@ import type { SidebarFavorite } from '../../lib/sidebarFavorites'
 import type { Scope } from '../../types'
 
 function favoriteToggleAriaLabel(chatRow: boolean, favorited: boolean, label: string): string {
-  if (chatRow) return `${favorited ? 'Unpin' : 'Pin'} ${label}`
+  if (chatRow) return favorited ? t('Unpin {label}', { label }) : t('Pin {label}', { label })
 
-  return favorited ? `Remove ${label} from Favorites` : `Add ${label} to Favorites`
+  return favorited
+    ? t('Remove {label} from Favorites', { label })
+    : t('Add {label} to Favorites', { label })
+}
+
+// These titles double as section ids (chat-sections, Sidebar) and collapse-state
+// keys, so they are translated only where they are shown.
+const SECTION_LABELS: Record<string, string> = {
+  Agents: t('Agents'),
+  Pinned: t('Pinned'),
+  Favorites: t('Favorites'),
 }
 
 type SectionListProps = {
@@ -92,7 +103,7 @@ export function SidebarSectionList({
                 'w-full hover:text-secondary flex items-center gap-1.5',
               )}
             >
-              <span className="text-left">{section.title}</span>
+              <span className="text-left">{SECTION_LABELS[section.title] ?? section.title}</span>
               <span
                 className="t-icon-swap w-3 h-3 flex-shrink-0"
                 data-state={isGroupCollapsed(section) ? 'a' : 'b'}
@@ -164,8 +175,8 @@ export function SidebarSectionList({
                       const foldToggle = hasChildren ? (
                         <span
                           role="button"
-                          aria-label={folded ? 'Show sub-agents' : 'Hide sub-agents'}
-                          title={folded ? 'Show sub-agents' : 'Hide sub-agents'}
+                          aria-label={folded ? t('Show sub-agents') : t('Hide sub-agents')}
+                          title={folded ? t('Show sub-agents') : t('Hide sub-agents')}
                           onClick={(e) => {
                             e.stopPropagation()
                             toggleGroup({ title: item.key })

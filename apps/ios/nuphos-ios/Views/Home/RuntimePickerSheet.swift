@@ -1,9 +1,25 @@
 import SwiftUI
 
 /// Browsing a Box never changes the selected agent. Only an agent row selects or moves.
+///
+/// The detents sit here, outside the view that reads the environment: on a
+/// Mac, a sheet whose own body declares detents is first built with an empty
+/// environment, and the missing `AgentStore` traps.
 struct RuntimePickerSheet: View {
     var session: ChatSession?
     var onMove: (RuntimeInstance) -> Void = { _ in }
+    @State private var detent = PresentationDetent.height(720)
+
+    var body: some View {
+        RuntimePicker(session: session, onMove: onMove, detent: $detent)
+            .presentationDetents([.height(720), .large], selection: $detent)
+    }
+}
+
+private struct RuntimePicker: View {
+    var session: ChatSession?
+    var onMove: (RuntimeInstance) -> Void
+    @Binding var detent: PresentationDetent
     @Environment(AgentStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -12,14 +28,18 @@ struct RuntimePickerSheet: View {
     @State private var showSetup = false
     @State private var managing = false
     @State private var pendingLocal: RuntimeInstance?
-    @State private var detent = PresentationDetent.height(720)
 
     private var selectedId: String? { session == nil ? store.newConversationRuntime?.id : session?.runtimeId }
-    /// Only runtimes that can take a turn now: never an offline computer or one waiting for a sign-in.
+    /// Whether a runtime can take a turn now: not an offline computer or one waiting for a sign-in.
+    private func ready(_ runtime: RuntimeInstance) -> Bool {
+        runtime.isSelectable && runtime.local?.online != false && store.quotas[runtime.id]?.needsSignIn != true
+    }
+    /// The ready runtimes, and the user's own computers that are not: those stay
+    /// listed, greyed with the reason, so a closed laptop does not look missing.
     private var choices: [RuntimeInstance] {
-        let ready = store.runtimes.filter { $0.isSelectable && $0.local?.online != false && store.quotas[$0.id]?.needsSignIn != true }
-        guard let session, !session.isOwner else { return ready }
-        return ready.filter { $0.kind == "managed" }
+        let listed = store.runtimes.filter { ready($0) || $0.tier == .myComputers }
+        guard let session, !session.isOwner else { return listed }
+        return listed.filter { $0.kind == "managed" }
     }
     private var boxes: [SelectorBox] { SelectorBox.grouped(choices, devices: store.agentDevices) }
     private var administrator: Bool { store.selectedTeam?.isAdministrator == true }
@@ -73,7 +93,6 @@ struct RuntimePickerSheet: View {
             .onChange(of: store.runtimes) { _, _ in openCurrentBox() }
         }
         .tint(Theme.heading)
-        .presentationDetents([.height(720), .large], selection: $detent)
         .onChange(of: showSetup || managing) { _, open in if open { detent = .large } }
     }
 
@@ -95,8 +114,10 @@ struct RuntimePickerSheet: View {
                                 Button { select(runtime) } label: {
                                     SelectorAgentRow(runtime: runtime, quota: store.quotas[runtime.id], selected: runtime.id == selectedId)
                                         .padding(.leading, 12)
+                                        .opacity(ready(runtime) ? 1 : 0.45)
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(!ready(runtime))
                                 .accessibilityIdentifier("agent-\(runtime.id)")
                                 .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
                             }
@@ -222,12 +243,15 @@ struct SelectorAgentRow: View {
             Spacer(minLength: 4)
             if selected { Image(systemName: "checkmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.heading) }
         }.frame(minHeight: 48).contentShape(Rectangle())
-            .accessibilityElement(children: .combine)
     }
     @ViewBuilder private var details: some View {
         if SelectorBox.agentName(runtime) != runtime.providerName { Text(runtime.providerName).font(.system(size: detailSize)).foregroundStyle(Theme.muted) }
-        if runtime.status != .active || runtime.local?.online == false {
-            Text(runtime.status != .active ? "Disabled" : "Offline").font(.system(size: detailSize)).foregroundStyle(Theme.muted)
+        if runtime.status != .active {
+            Text("Disabled").font(.system(size: detailSize)).foregroundStyle(Theme.muted)
+        } else if runtime.local?.online == false {
+            Text("Offline · open Nuphos on that computer").font(.system(size: detailSize)).foregroundStyle(Theme.muted)
+        } else if runtime.local?.signedIn == false || quota?.needsSignIn == true {
+            Text("Signed out · sign in on that computer").font(.system(size: detailSize)).foregroundStyle(Theme.muted)
         }
         if let quota { QuotaLine(quota: quota) }
     }
@@ -320,7 +344,6 @@ struct ModelSettingsSheet: View {
             .refreshable { await refresh() }
         }
         .tint(Theme.heading)
-        .presentationDetents([.medium, .large])
     }
 }
 
