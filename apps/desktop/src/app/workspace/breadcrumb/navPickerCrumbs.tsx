@@ -19,6 +19,7 @@ export function pushNavPickerCrumbs(ctx: BreadcrumbContext, out: BreadcrumbSegme
     filter,
     s3Detail,
     architectureDetail,
+    designDetail,
     nuphosDashboard,
     nuphosDashboards,
     connectorDetail,
@@ -51,6 +52,8 @@ export function pushNavPickerCrumbs(ctx: BreadcrumbContext, out: BreadcrumbSegme
       cloudflareDetail !== null && active === CLOUDFLARE_DETAIL_ACTIVE[cloudflareDetail.kind]
     const inArchitectureDetail =
       scope.kind === 'team' && active === 'team.architecture' && Boolean(architectureDetail)
+    const inDesignDetail =
+      scope.kind === 'team' && active === 'team.designs' && Boolean(designDetail)
     const inNuphosDashboardDetail =
       scope.kind === 'team' && active === 'team.dashboards' && Boolean(nuphosDashboard)
     const inConnectorDetail =
@@ -97,15 +100,17 @@ export function pushNavPickerCrumbs(ctx: BreadcrumbContext, out: BreadcrumbSegme
             ? () => updateActiveTab((tab) => ({ ...tab, cloudflareDetail: null }))
             : inArchitectureDetail
               ? () => updateActiveTab((tab) => ({ ...tab, architectureDetail: null }))
-              : inNuphosDashboardDetail
-                ? () => updateActiveTab((tab) => ({ ...tab, nuphosDashboard: null }))
-                : inConnectorDetail
-                  ? () => updateActiveTab((tab) => ({ ...tab, connectorDetail: null }))
-                  : inAgentConversation
-                    ? () => updateActiveTab((tab) => ({ ...tab, agentSessionId: null }))
-                    : inPlanDetail
-                      ? () => updateActiveTab((tab) => ({ ...tab, filter: '' }))
-                      : undefined,
+              : inDesignDetail
+                ? () => updateActiveTab((tab) => ({ ...tab, designDetail: null }))
+                : inNuphosDashboardDetail
+                  ? () => updateActiveTab((tab) => ({ ...tab, nuphosDashboard: null }))
+                  : inConnectorDetail
+                    ? () => updateActiveTab((tab) => ({ ...tab, connectorDetail: null }))
+                    : inAgentConversation
+                      ? () => updateActiveTab((tab) => ({ ...tab, agentSessionId: null }))
+                      : inPlanDetail
+                        ? () => updateActiveTab((tab) => ({ ...tab, filter: '' }))
+                        : undefined,
     })
     if (inArchitectureDetail && architectureDetail) {
       out.push({
@@ -113,6 +118,9 @@ export function pushNavPickerCrumbs(ctx: BreadcrumbContext, out: BreadcrumbSegme
         isResource: true,
         icon: currentNavItem.icon,
       })
+    }
+    if (inDesignDetail && designDetail) {
+      out.push({ label: designDetail.designName, isResource: true, icon: currentNavItem.icon })
     }
     if (inNuphosDashboardDetail && nuphosDashboard) {
       out.push({

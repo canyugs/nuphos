@@ -6,17 +6,21 @@ import {
   HeartPulse,
   Inbox,
   Network,
+  Palette,
   ScrollText,
   Users,
 } from 'lucide-react'
 
 import { NuphosDashboardsView } from '../../dashboards/NuphosDashboardsView'
+import { emptyNavigation, pageLocationForNavigation } from '../../lib/appRoutes'
+import { toAbsoluteAtlasUrl } from '../../lib/webBaseUrl'
 import { dashboardsPageTitle } from '../../dashboards/view/pageTitle'
 import { ArchitectureView } from '../../views/ArchitectureView'
 import { ArtifactView } from '../../views/ArtifactView'
 import { ArchivedChatsView } from '../../views/ArchivedChatsView'
 import { AuditLogView } from '../../views/AuditLogView'
 import { BrowserView } from '../../views/BrowserView'
+import { DesignsView } from '../../views/DesignsView'
 import { DesktopView } from '../../views/DesktopView'
 import { InboxView } from '../../views/InboxView'
 import { MonitoringView } from '../../views/MonitoringView'
@@ -40,6 +44,8 @@ export function renderTeamToolPages(ctx: ScopeRenderContext): React.ReactNode | 
     refreshKey,
     architectureDetail,
     setArchitectureDetail,
+    designDetail,
+    setDesignDetail,
     nuphosDashboard,
     nuphosDashboards,
     restoredTitle,
@@ -88,6 +94,17 @@ export function renderTeamToolPages(ctx: ScopeRenderContext): React.ReactNode | 
         teamId={scope.teamId}
         artifactId={filter}
         onAskAgent={(prompt) => ctx.openInChat(prompt, { mode: 'text' })}
+        onOpenDesign={(designId) =>
+          onOpenNodeLink(
+            toAbsoluteAtlasUrl(
+              pageLocationForNavigation(
+                emptyNavigation(scope, 'team.designs', {
+                  designDetail: { designId, designName: 'Design' },
+                }),
+              ).href,
+            ),
+          )
+        }
       />
     )
   }
@@ -225,6 +242,30 @@ export function renderTeamToolPages(ctx: ScopeRenderContext): React.ReactNode | 
             : undefined
         }
         onOpenUrl={onOpenNodeLink}
+        onOpenAgentChat={onOpenAgentChat}
+      />,
+    )
+  }
+  if (active === 'team.designs') {
+    return renderPage(
+      'team.designs',
+      'Designs',
+      <Palette className="w-3.5 h-3.5 text-tertiary" strokeWidth={1.8} />,
+      <DesignsView
+        teamId={scope.teamId}
+        refreshKey={refreshKey}
+        filter={filter}
+        onCount={onCount}
+        onLoading={onLoading}
+        openDesignId={designDetail?.designId ?? null}
+        openDesignName={designDetail?.designName ?? null}
+        onOpenDesign={(id, name) => setDesignDetail({ designId: id, designName: name })}
+        onCloseDesign={() => setDesignDetail(null)}
+        onRenameDesign={(name) =>
+          designDetail
+            ? setDesignDetail({ designId: designDetail.designId, designName: name })
+            : undefined
+        }
         onOpenAgentChat={onOpenAgentChat}
       />,
     )
