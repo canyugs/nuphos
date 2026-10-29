@@ -37,12 +37,23 @@ enum SharedShareSession {
               !value.isEmpty, !value.contains("$("), value.hasSuffix(".ai.nuphos.ios.shared-auth") else { return nil }
         return value
     }
+    #if SHARE_SESSION_INTEGRATION_TESTS
+    // Test executable only: never query or mutate the application's live service.
+    static var beforeContextWrite: (() -> Void)?
+    #endif
     private static func query() throws -> [String: Any] {
+        #if SHARE_SESSION_INTEGRATION_TESTS
+        let service = ProcessInfo.processInfo.arguments[1]
+        precondition(service.hasPrefix("ai.nuphos.ios.share-session.integration."))
+        return [kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service, kSecAttrAccount as String: "synthetic-only"]
+        #else
         guard let group else { throw Failure.unavailable }
         return [kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: "ai.nuphos.ios.share-session",
                 kSecAttrAccount as String: "current",
                 kSecAttrAccessGroup as String: group]
+        #endif
     }
     static func read() throws -> Record? {
         var q = try query(); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -68,6 +79,9 @@ enum SharedShareSession {
     static func updateContext(token: String, loginID: UUID?, context: Context) {
         guard let loginID, var record = try? read(), record.token == token,
               record.loginID == loginID, record.context != context else { return }
+        #if SHARE_SESSION_INTEGRATION_TESTS
+        beforeContextWrite?()
+        #endif
         let oldLease = record.leaseID; record.leaseID = UUID(); record.context = context
         guard var q = try? query(), let data = try? JSONEncoder().encode(record) else { return }
         q[kSecAttrGeneric as String] = Data(oldLease.uuidString.utf8)

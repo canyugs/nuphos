@@ -375,12 +375,12 @@ final class ChatSession {
         let progress = sending!.progress
         sending?.task = Task {
             do {
-                try admissionCheck?()
-                if !uploads.isEmpty {
-                    let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
-                    parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
+                try await SubmissionAdmission.prepare(check: admissionCheck) {
+                    if !uploads.isEmpty {
+                        let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
+                        parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
+                    }
                 }
-                try admissionCheck?()
                 sending = nil
                 let message = ChatMessage(role: .user, parts: parts)
                 await dispatch(message, title: trimmed.isEmpty ? (attachments.first?.name ?? "Attachment") : trimmed, submission: submission)
@@ -963,6 +963,7 @@ final class ChatSession {
 
             do {
                 defer { applyFrames(backlog.flush()) }
+                try Task.checkCancellation()
                 try admissionCheck?()
                 let request = try AgentChatAPI.chatRequest(token: token, body: body)
                 debugLog("POST /agent/chat stream=\(options.streamId.prefix(8)) resume=\(shouldResume) from=\(resumeFrom) msgs=\(window.messages.count) base=\(window.baseIndex)")
