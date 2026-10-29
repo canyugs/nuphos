@@ -83,6 +83,6 @@ enum SharedShareSession {
     enum Failure: Error { case identity, unavailable }
     nonisolated(unsafe) static var publishedToken: String?
     static func validate(_ record: Record) throws {}
-    static func publishLogin(token: String, accountID: String, backend: URL) throws { publishedToken = token }
+    static func publishLogin(token: String, accountID: String, backend: URL) throws -> UUID { publishedToken = token; return UUID() }
     static func revoke() { publishedToken = nil }
 }

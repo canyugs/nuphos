@@ -63,16 +63,36 @@ enum SharedShareSession {
         guard status == errSecSuccess, let data = item as? Data else { throw Failure.keychain(status) }
         return try JSONDecoder().decode(Record.self, from: data)
     }
-    static func publishLogin(token: String, accountID: String, backend: URL) throws {
+    /// A containing-app store captures one login. Only an explicit verified
+    /// publication may rebind the active store; other old stores stay fenced.
+    struct Owner {
+        let token: String
+        private(set) var loginID: UUID?
+        init(token: String) {
+            self.token = token
+            loginID = (try? SharedShareSession.read()).flatMap { $0.token == token ? $0.loginID : nil }
+        }
+        mutating func bindVerified(_ id: UUID) -> Bool {
+            guard let record = try? SharedShareSession.read(), record.token == token, record.loginID == id else { return false }
+            loginID = id
+            return true
+        }
+        func update(_ context: Context) {
+            SharedShareSession.updateContext(token: token, loginID: loginID, context: context)
+        }
+    }
+    @discardableResult
+    static func publishLogin(token: String, accountID: String, backend: URL) throws -> UUID {
         let record = Record(loginID: UUID(), leaseID: UUID(), token: token, accountID: accountID, backend: backend)
         let q = try query()
         let values: [String: Any] = [kSecValueData as String: try JSONEncoder().encode(record),
             kSecAttrGeneric as String: Data(record.leaseID.uuidString.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
         let update = SecItemUpdate(q as CFDictionary, values as CFDictionary)
-        if update == errSecSuccess { return }
+        if update == errSecSuccess { return record.loginID }
         guard update == errSecItemNotFound,
               SecItemAdd(q.merging(values) { $1 } as CFDictionary, nil) == errSecSuccess else { throw Failure.unavailable }
+        return record.loginID
     }
     /// Conditional Keychain update: stale stores cannot resurrect a deleted login
     /// or overwrite another login/context written between read and update.

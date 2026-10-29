@@ -35,6 +35,27 @@ import Foundation
         let configured = try SharedShareSession.read()!
         precondition(configured.context == context && configured.leaseID != first.leaseID)
         print("PASS: actual Keychain context update rotates lease")
+        // Cached Home can construct a store while server verification is held.
+        // Reconcile only the active store after the verified login publication.
+        for hasPreviousLogin in [false, true] {
+            SharedShareSession.revoke()
+            if hasPreviousLogin { try login() }
+            var active = SharedShareSession.Owner(token: "synthetic-only")
+            let stale = SharedShareSession.Owner(token: "synthetic-only")
+            let verifiedID = try SharedShareSession.publishLogin(token: "synthetic-only", accountID: "synthetic-account", backend: URL(string: "https://example.invalid")!)
+            precondition(active.bindVerified(verifiedID))
+            active.update(context)
+            let rebound = try SharedShareSession.read()!
+            precondition(rebound.context == context)
+            try login() // A genuinely different login, even with the same token.
+            let differentLogin = try SharedShareSession.read()!
+            stale.update(context)
+            active.update(context)
+            let afterStale = try SharedShareSession.read()
+            precondition(SharedShareSession.matches(afterStale, lease: differentLogin))
+            precondition(!active.bindVerified(verifiedID))
+        }
+        print("PASS: cached store rebind publishes selected context; stale stores cannot overwrite another login")
         for action in ["relogin", "revoke", "context-change"] {
             try login()
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

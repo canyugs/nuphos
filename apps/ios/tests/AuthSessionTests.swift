@@ -4,6 +4,7 @@ import Foundation
 /// so its answer can arrive after the user has signed out or in again.
 @main @MainActor struct AuthSessionTests {
     static func main() async {
+        await aCachedHomeReceivesVerifiedSharingOwner()
         await aLateRejectionKeepsANewSignIn()
         await aLateSuccessKeepsANewSharedSignIn()
         await aLateRejectionAfterSignOutStaysSignedOut()
@@ -32,6 +33,17 @@ import Foundation
             answer?.resume(with: result)
             await restoring.value
         }
+    }
+
+    private static func aCachedHomeReceivesVerifiedSharingOwner() async {
+        let session = AuthSession()
+        let reply = await launch(session)
+        // This is the same cached signed-in state that lets Home create its store.
+        precondition(session.user?.id == cached.id)
+        precondition(session.sharingLoginID == nil)
+        await reply(.success(cached))
+        precondition(session.sharingLoginID != nil)
+        precondition(SharedShareSession.publishedToken == "old")
     }
 
     private static func aLateRejectionKeepsANewSignIn() async {

@@ -157,6 +157,13 @@ struct HomeView: View {
                 plans = PlansStore(token: token)
                 connectors = ConnectorsStore(token: token)
             }
+            if let loginID = session.sharingLoginID, let token = session.token {
+                store?.bindSharingLogin(loginID, token: token)
+            }
+        }
+        .onChange(of: session.sharingLoginID, initial: true) { _, loginID in
+            guard session.user?.id == user.id, let loginID, let token = session.token else { return }
+            store?.bindSharingLogin(loginID, token: token)
         }
         .focusedSceneValue(\.newChat) {
             page = .agent

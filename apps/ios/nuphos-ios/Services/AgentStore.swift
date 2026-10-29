@@ -290,7 +290,7 @@ final class AgentStore {
 
     private let loadsHistory: Bool
     private let token: String
-    private let sharingLoginID: UUID?
+    private var sharingOwner: SharedShareSession.Owner
     private var isShareEntry = false
     private var searchTask: Task<Void, Never>?
     private var loadGeneration = 0
@@ -345,7 +345,7 @@ final class AgentStore {
     init(token: String, loadsHistory: Bool = true) {
         self.loadsHistory = loadsHistory
         self.token = token
-        sharingLoginID = (try? SharedShareSession.read()).flatMap { $0.token == token ? $0.loginID : nil }
+        sharingOwner = SharedShareSession.Owner(token: token)
         ConversationUnread.shared.markRead = { team, session, seq in
             try? await AgentChatAPI.markRead(token: token, teamId: team, sessionId: session, seq: seq)
         }
@@ -399,10 +399,14 @@ final class AgentStore {
         Task { await reload() }
     }
 
+    func bindSharingLogin(_ loginID: UUID, token: String) {
+        guard self.token == token, !isShareEntry, sharingOwner.bindVerified(loginID) else { return }
+        publishSharingContext()
+    }
+
     private func publishSharingContext() {
         guard !isShareEntry, let team = selectedTeam else { return }
-        SharedShareSession.updateContext(token: token, loginID: sharingLoginID,
-            context: .init(teamID: team.id, runtimeID: newConversationRuntime?.id,
+        sharingOwner.update(.init(teamID: team.id, runtimeID: newConversationRuntime?.id,
                            credentials: credentialSelection.json, permissionMode: permissionMode.rawValue))
     }
 

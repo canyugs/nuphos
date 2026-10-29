@@ -30,6 +30,7 @@ final class AuthSession {
             }
         }
     }
+    private(set) var sharingLoginID: UUID?
     private(set) var token: String?
     private(set) var aiConsentAccepted = false
     private(set) var aiConsentVersion: String?
@@ -110,7 +111,7 @@ final class AuthSession {
             await loadAIConsent()
             // A newer sign-out or sign-in wins over this restore response.
             guard token == saved else { return }
-            try? SharedShareSession.publishLogin(token: saved, accountID: user.id, backend: NuphosAPI.baseURL)
+            sharingLoginID = try? SharedShareSession.publishLogin(token: saved, accountID: user.id, backend: NuphosAPI.baseURL)
             state = .signedIn(user)
         } catch NuphosAPI.Failure.unauthorized {
             guard token == saved else { return }
@@ -159,7 +160,7 @@ final class AuthSession {
             try Keychain.write(token, for: Self.tokenKey)
             self.token = token
             await loadAIConsent()
-            try? SharedShareSession.publishLogin(token: token, accountID: user.id, backend: NuphosAPI.baseURL)
+            sharingLoginID = try? SharedShareSession.publishLogin(token: token, accountID: user.id, backend: NuphosAPI.baseURL)
             state = .signedIn(user)
             Analytics.shared.track("login")
         } catch {
@@ -279,6 +280,7 @@ final class AuthSession {
     }
 
     private func clearToken() {
+        sharingLoginID = nil
         SharedShareSession.revoke()
         Keychain.delete(Self.tokenKey)
         LaunchCache.clear()
