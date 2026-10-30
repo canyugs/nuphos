@@ -1,7 +1,11 @@
 import { t } from '../../../i18n/index.ts'
 
+import { metricSize, metricTitle } from './homeMetricFormat.ts'
+
 import type { GithubPR, GithubWorkflowRun } from '../../../types'
 import type {
+  HomeMetricCard,
+  HomeMetricKind,
   HomeGithubCard,
   HomeGridItem,
   HomeLayout,
@@ -12,10 +16,16 @@ import type {
   HomeRunStatus,
 } from '../../../types/team.ts'
 
-export type { HomeGithubCard, HomeLayout, HomePanel, HomeRepo } from '../../../types/team.ts'
+export type {
+  HomeGithubCard,
+  HomeLayout,
+  HomeMetricCard,
+  HomePanel,
+  HomeRepo,
+} from '../../../types/team.ts'
 
 /** What a team starts with: just the activity heatmap. */
-export const DEFAULT_HOME_LAYOUT: HomeLayout = { team: true, github: [], panels: [] }
+export const DEFAULT_HOME_LAYOUT: HomeLayout = { team: true, github: [], panels: [], metrics: [] }
 
 /**
  * The default plus what a team already has to show: pull request and CI cards
@@ -47,6 +57,9 @@ export function starterLayout({
 
 export const repoKey = (repo: HomeRepo) => repo.fullName
 export const panelKey = (panel: HomePanel) => `${panel.dashboardId}/${panel.panelId}`
+/** A metric card's grid key; the kind is in it so its size and name are known before it loads. */
+export const metricKey = (card: HomeMetricCard) => `metric:${card.kind}:${card.id}`
+const metricKind = (key: string) => key.split(':')[1] as HomeMetricKind
 
 /** Adds `item` when no entry shares its key, otherwise removes that entry. */
 export function toggleItem<T>(list: T[], item: T, key: (t: T) => string): T[] {
@@ -77,6 +90,11 @@ export function statusLabel(card: HomeGithubCard): string {
     .filter((s) => chosen.includes(s.value))
     .map((s) => s.label)
     .join(', ')
+}
+
+/** A pull request or CI card's title, e.g. "CI · Failing". */
+export function githubCardTitle(card: HomeGithubCard): string {
+  return `${card.kind === 'pulls' ? t('Pull requests') : 'CI'} · ${statusLabel(card)}`
 }
 
 /** Pull requests in any of `statuses`; `open` takes them all. */
@@ -119,6 +137,7 @@ export const GRID_COLUMNS = 12
 function defaultSize(key: string): { w: number; h: number } {
   if (key === 'team') return { w: GRID_COLUMNS, h: 8 }
   if (key.startsWith('panel:')) return { w: GRID_COLUMNS / 2, h: 6 }
+  if (key.startsWith('metric:')) return metricSize(metricKind(key))
   // GitHub cards (`gh:<id>`).
 
   return { w: GRID_COLUMNS / 2, h: 7 }
@@ -130,11 +149,13 @@ function defaultSize(key: string): { w: number; h: number } {
  */
 export function minCardSize(key: string): { minW: number; minH: number } {
   if (key === 'team') return { minW: GRID_COLUMNS / 2, minH: 4 }
+  // A metric card needs room for its title, number and the lines under it.
+  if (key.startsWith('metric:')) return { minW: 4, minH: metricSize(metricKind(key)).h }
 
   return { minW: 3, minH: 3 }
 }
 
-const overlaps = (a: HomeGridItem, b: HomeGridItem) =>
+export const overlaps = (a: HomeGridItem, b: HomeGridItem) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 
 /**
@@ -174,6 +195,18 @@ export function gridFor(keys: string[], saved: HomeGridItem[] = []): HomeGridIte
   })
 }
 
+/** A card's title from its grid key, as screen readers hear it when it moves. */
+export function cardLabel(layout: HomeLayout, key: string): string {
+  if (key === 'team') return t('Team activity')
+  const github = layout.github.find((card) => `gh:${card.id}` === key)
+
+  if (github) return githubCardTitle(github)
+  if (key.startsWith('panel:')) return t('Dashboard panel')
+  if (key.startsWith('metric:')) return metricTitle(metricKind(key))
+
+  return key
+}
+
 /**
  * The layout to show and edit, or null while it is unknown. Only a successful
  * read makes it known: editing from a stand-in would overwrite the real one.
@@ -191,6 +224,7 @@ export function editableLayout(
     ...layout,
     github: layout.github ?? [],
     panels: layout.panels ?? [],
+    metrics: layout.metrics ?? [],
   }
 }
 

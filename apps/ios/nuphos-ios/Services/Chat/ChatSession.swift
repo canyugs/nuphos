@@ -52,6 +52,10 @@ final class ChatSession {
     private(set) var agentRuntime: String?
     private(set) var runtimeId: String?
     private(set) var runtimeLabel: String?
+    /// On a teammate's computer that asks its owner first: this conversation waits, or was declined.
+    private(set) var shareApproval: ShareApprovalWait?
+    /// Counts sends the server queued, so a waiting conversation is asked about at once.
+    private(set) var queuedSends = 0
     /// Pull requests and issues the agent linked to this conversation.
     private(set) var resources: [SessionResource] = []
     /// Invites, removals and runtime moves, refreshed with every detail read.
@@ -172,11 +176,19 @@ final class ChatSession {
         try await WorkspaceAPI.request("teams/\(teamId)/file-transfers/\(groupId)/download", token: token)
     }
 
+    /// Reads where this conversation stands with the owner of the teammate's computer it
+    /// runs on; false once it is no longer pending, when there is nothing more to watch.
+    func refreshShareApproval() async -> Bool {
+        guard let answer = try? await NuphosAPI.ownShareApproval(token: token, sessionId: sessionId) else { return true }
+        shareApproval = ShareApprovalWait(status: answer.status)
+
+        return ShareApprovalWait.keepsWatching(status: answer.status)
+    }
+
     private var transferPath: String { "agent-sessions/\(sessionId)/teams/\(teamId)/file-transfers" }
 
     // MARK: - Private
 
-    @ObservationIgnored var admissionCheck: (() throws -> Void)?
     private let token: String
     private var streamTask: Task<Void, Never>?
     /// The stream only follows a run already going, so nothing is lost by closing it.
@@ -184,6 +196,9 @@ final class ChatSession {
     private var currentStreamId: String?
     private var transcriptSyncTask: Task<Void, Never>?
     private var lastSyncedSignature = 0
+    /// The last message of the last full read, so the idle poll can tell
+    /// from one message whether anything changed.
+    private var serverTail: ServerTail?
     private var autoResumeAttempts = 0
     private var transcriptFullResend = false
     private var transcriptRebasedTo: Int?
@@ -290,12 +305,12 @@ final class ChatSession {
         do {
             let observedAt = ProcessInfo.processInfo.systemUptime
             let detail = try await NuphosAPI.conversationDetail(token: token, teamId: teamId, sessionId: sessionId)
+            serverTail = ServerTail(detail)
             var msgs = detail.messages
             baseIndex = detail.messagesFirstIndex ?? 0
             readOnly = detail.readOnly ?? true
             isOwner = detail.isOwner ?? false
             manages = detail.canManage ?? isOwner
-            if let t = detail.title, !t.isEmpty { title = t }
             adoptRuntime(from: detail)
             receiveRuntime(detail.runtimeState, observedAt: observedAt)
             Task { await refreshQueue() }
@@ -334,9 +349,6 @@ final class ChatSession {
                 if !readOnly, !transportStreaming { send(text) }
             }
         } catch {
-            // The view went away mid-load (a link or notification replaced
-            // it). That is not a failure: its next appearance loads again.
-            guard !Task.isCancelled else { return }
             loadError = error.localizedDescription
             loaded = true
         }
@@ -386,11 +398,9 @@ final class ChatSession {
         let progress = sending!.progress
         sending?.task = Task {
             do {
-                try await SubmissionAdmission.prepare(check: admissionCheck) {
-                    if !uploads.isEmpty {
-                        let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
-                        parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
-                    }
+                if !uploads.isEmpty {
+                    let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
+                    parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
                 }
                 sending = nil
                 let message = ChatMessage(role: .user, parts: parts)
@@ -835,6 +845,7 @@ final class ChatSession {
                     return
                 case .queued:
                     // No reply comes on this stream; the queued turn's own does.
+                    queuedSends += 1
                     if let i = streamAssistantIndex, messages.indices.contains(i) { messages.remove(at: i) }
                     streamAssistantIndex = nil
                     // The message leaves the transcript for the queue strip until its turn runs.
@@ -918,17 +929,18 @@ final class ChatSession {
     }
 
     private func adoptTranscript(from detail: AgentConversationDetail) {
+        serverTail = ServerTail(detail)
         let serverTotal = (detail.messagesFirstIndex ?? 0) + detail.messages.count
         let localTotal = baseIndex + messages.count
         guard serverTotal >= localTotal, !detail.messages.isEmpty else { return }
 
         let serverBase = detail.messagesFirstIndex ?? 0
+        let adopted: [ChatMessage]
         if isNativeRuntime {
-            messages = RuntimeTranscript.reconcile(server: detail.messages, serverBase: serverBase, local: messages, localBase: baseIndex)
-            baseIndex = serverBase
+            adopted = RuntimeTranscript.reconcile(server: detail.messages, serverBase: serverBase, local: messages, localBase: baseIndex)
         } else if serverTotal == localTotal, serverBase == baseIndex,
            zip(detail.messages, messages).allSatisfy({ $0.role == $1.role }) {
-            messages = zip(detail.messages, messages).map { server, local in
+            adopted = zip(detail.messages, messages).map { server, local in
                 var m = local
                 m.id = server.id
                 m.createdAt = server.createdAt ?? local.createdAt
@@ -937,15 +949,18 @@ final class ChatSession {
                 return m
             }
         } else {
-            messages = detail.messages
-            baseIndex = serverBase
+            adopted = detail.messages
         }
-        if let t = detail.title, !t.isEmpty { title = t }
+        // The idle poll lands here every few seconds with what is already shown.
+        // Writing it anyway redraws the whole transcript.
+        if adopted != messages { messages = adopted }
+        if baseIndex != serverBase { baseIndex = serverBase }
         adoptRuntime(from: detail)
         lastSyncedSignature = signature()
     }
 
     private func adoptRuntime(from detail: AgentConversationDetail) {
+        if let t = detail.title, !t.isEmpty, t != title { title = t }
         isOwner = detail.isOwner ?? false
         manages = detail.canManage ?? isOwner
         readOnly = detail.readOnly ?? true
@@ -966,14 +981,19 @@ final class ChatSession {
             let observedAt = ProcessInfo.processInfo.systemUptime
             let previousSignature = signature()
             let attached = attachedStreamId
-            guard let detail = try? await NuphosAPI.conversationDetail(token: token, teamId: teamId, sessionId: sessionId) else { continue }
+            // Most ticks find nothing new. One message answers that; the full
+            // tail (hundreds of KB, decoded on the main thread) is read only
+            // when the conversation moved or a run is live.
+            guard let head = try? await NuphosAPI.conversationDetail(token: token, teamId: teamId, sessionId: sessionId, tail: 1, displayed: false) else { continue }
+            let moved = head.activeRun != nil || ServerTail(head) != serverTail
+            guard let detail = moved ? try? await NuphosAPI.conversationDetail(token: token, teamId: teamId, sessionId: sessionId) : head else { continue }
             guard !Task.isCancelled else { return }
             receiveRuntime(detail.runtimeState, observedAt: observedAt)
             adoptRuntime(from: detail)
             // A waiting message leaves the strip once its turn starts.
             if !serverQueued.isEmpty { await refreshQueue() }
             if !pendingModelSettings.isEmpty { await refreshSessionConfig() }
-            guard !submitting, attachedStreamId == attached else { continue }
+            guard moved, !submitting, attachedStreamId == attached else { continue }
             let follow = RuntimeTranscript.runToFollow(active: detail.activeRun?.streamId, attached: attached, stopped: lastStoppedStreamId)
             let mayMove = attached == nil ? signature() == previousSignature : isNativeRuntime && !awaitingAdmission
             if let follow, mayMove {
@@ -1051,8 +1071,6 @@ final class ChatSession {
 
             do {
                 defer { applyFrames(backlog.flush()) }
-                try Task.checkCancellation()
-                try admissionCheck?()
                 let request = try AgentChatAPI.chatRequest(token: token, body: body)
                 debugLog("POST /agent/chat stream=\(options.streamId.prefix(8)) resume=\(shouldResume) from=\(resumeFrom) msgs=\(window.messages.count) base=\(window.baseIndex)")
                 for try await event in SSEClient.events(for: request) {
@@ -1505,4 +1523,17 @@ final class ChatSession {
         }
         return d
     }()
+}
+
+/// A conversation's last message and its index: equal means nothing was
+/// appended or rewritten at the end since the last read.
+private struct ServerTail: Equatable {
+    let index: Int
+    let message: ChatMessage
+
+    init?(_ detail: AgentConversationDetail) {
+        guard let last = detail.messages.last else { return nil }
+        index = (detail.messagesFirstIndex ?? 0) + detail.messages.count - 1
+        message = last
+    }
 }
