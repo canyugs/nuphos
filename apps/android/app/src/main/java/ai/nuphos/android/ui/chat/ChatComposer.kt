@@ -66,6 +66,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.InsertDriveFile
+import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.PlaylistAdd
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -186,6 +187,7 @@ fun ChatComposer(
     val latestSendAllowed by rememberUpdatedState(effectiveDraftingEnabled && canSubmit)
     val latestSendKey by rememberUpdatedState(draft?.key)
     val latestOnSend by rememberUpdatedState(onSend)
+    var showComputers by remember(draft, store?.workspaceRevision) { mutableStateOf(false) }
     var showModel by remember(modelSettings) { mutableStateOf(false) }
     var picking by remember(draft) { mutableStateOf(false) }
     var pickerError by remember(draft) { mutableStateOf<String?>(null) }
@@ -295,8 +297,25 @@ fun ChatComposer(
             updateText(appended)
         }
     }
-    val voice = remember(draft, voiceServices) { VoiceInput(voiceServices, scope) { latestWrite(it) } }
-    var askingVoiceKey by remember(draft) { mutableStateOf(false) }
+    val voiceAuth = ai.nuphos.android.ui.LocalAuthSession.current
+    val voiceToken = voiceAuth.token.orEmpty()
+    val voiceAccount = voiceAuth.user?.id
+    val voiceTeam = draft?.key?.teamId ?: store.selectedTeam?.id
+    val voiceConsentRevision = ai.nuphos.android.session.AiAccess.revision
+    val latestVoiceAllowed by rememberUpdatedState(effectiveDraftingEnabled && canSubmit)
+    val voice = remember(draft, voiceServices, voiceToken, voiceAccount, voiceTeam,
+        voiceAuth.generation, store.workspaceRevision, voiceConsentRevision) {
+        val authGeneration = voiceAuth.generation
+        val workspaceRevision = store.workspaceRevision
+        fun current() = latestVoiceAllowed && voiceToken.isNotBlank() && voiceAccount != null && voiceTeam != null &&
+            voiceAuth.token == voiceToken && voiceAuth.generation == authGeneration && voiceAuth.user?.id == voiceAccount &&
+            store.workspaceRevision == workspaceRevision && store.selectedTeam?.id == voiceTeam &&
+            ai.nuphos.android.session.AiAccess.allows(voiceToken) &&
+            (draft == null || draft.key.accountId == voiceAccount)
+        val access = ai.nuphos.android.voice.VoiceAccess(voiceToken, voiceTeam.orEmpty(), ::current,
+            unauthorized = { if (current()) voiceAuth.signOut(ai.nuphos.android.data.NuphosApi.Failure.Unauthorized.message) })
+        VoiceInput(voiceServices, scope, access) { latestWrite(it) }
+    }
     var permissionTarget by remember { mutableStateOf<VoiceInput?>(null) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permissionTarget?.permissionResult(granted)
@@ -305,14 +324,14 @@ fun ChatComposer(
     fun startVoice() {
         if (voice.active || !effectiveDraftingEnabled || !canSubmit || picking) return
         try {
-            if (voiceServices.settings.key() == null) { askingVoiceKey = true; return }
+            if (!voice.available) { voice.error = "Choose a workspace and confirm your AI sharing choice to use voice input."; return }
             focusManager.clearFocus()
             keyboard?.hide()
             voice.awaitingPermission()
             if (voiceServices.microphonePermissionGranted()) voice.permissionResult(true)
             else if (permissionTarget == null) { permissionTarget = voice; permission.launch(Manifest.permission.RECORD_AUDIO) }
             else voice.cancel()
-        } catch (_: Exception) { voice.cancel(); voice.error = "Could not access secure voice settings or microphone permission." }
+        } catch (_: Exception) { voice.cancel(); voice.error = "Could not start voice input. Check microphone permission and try again." }
     }
     val voiceView = androidx.compose.ui.platform.LocalView.current
     DisposableEffect(voice.phase == VoiceInput.Phase.Recording, voiceView) {
@@ -323,14 +342,13 @@ fun ChatComposer(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(voice, lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) { voice.cancel(); askingVoiceKey = false }
+            if (event == Lifecycle.Event.ON_STOP) { voice.cancel() }
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer); voice.cancel() }
     }
-    LaunchedEffect(effectiveDraftingEnabled, canSubmit) { if (!effectiveDraftingEnabled || !canSubmit) { attachmentJob?.cancel(); voice.cancel(); askingVoiceKey = false } }
+    LaunchedEffect(effectiveDraftingEnabled, canSubmit) { if (!effectiveDraftingEnabled || !canSubmit) { attachmentJob?.cancel(); voice.cancel() } }
     BackHandler(enabled = voice.active) { voice.cancel() }
-    if (askingVoiceKey) OpenAIKeyDialog(voiceServices, onDismiss = { askingVoiceKey = false }, onSaved = { askingVoiceKey = false; startVoice() })
     voice.error?.let { message ->
         AlertDialog(onDismissRequest = { voice.error = null }, title = { Text("Voice input failed") },
             text = { Text(message) }, confirmButton = { TextButton(onClick = { voice.error = null }) { Text("OK") } })
@@ -603,6 +621,12 @@ fun ChatComposer(
                             leadingIcon = { Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(16.dp)) },
                         )
                         FilterChip(
+                            selected = resolvedSelection.ids["deviceIds"].orEmpty().isNotEmpty(),
+                            onClick = { showComputers = true },
+                            label = { Text("Computers" + resolvedSelection.ids["deviceIds"].orEmpty().size.takeIf { it > 0 }?.let { " · $it" }.orEmpty()) },
+                            leadingIcon = { Icon(Icons.Outlined.Computer, null, Modifier.size(16.dp)) },
+                        )
+                        FilterChip(
                             selected = resolvedMode == PermissionMode.Bypass,
                             onClick = { showMode = true },
                             label = { Text(resolvedMode.title) },
@@ -762,6 +786,21 @@ fun ChatComposer(
             confirmButton = { TextButton(onClick = { showAgentUsage = false }) { Text("Done") } })
     }
     if (showModel && modelSettings != null) ModelSettingsSheet(modelSettings, onDismiss = { showModel = false })
+    if (showComputers && store != null) {
+        var pending by remember(draft, store.workspaceRevision, resolvedSelection) { mutableStateOf(resolvedSelection) }
+        CredentialPickerSheet(
+            selection = pending,
+            onSelectionChange = { pending = it },
+            onDismiss = { showComputers = false },
+            computersOnly = true,
+            onConfirm = {
+                if (effectiveDraftingEnabled && showControls) {
+                    onSelectionChange?.invoke(pending) ?: store.updateCredentialSelection(pending)
+                }
+                showComputers = false
+            },
+        )
+    }
     if (showIam && store != null) {
         CredentialPickerSheet(
             selection = resolvedSelection,

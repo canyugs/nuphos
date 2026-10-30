@@ -55,7 +55,7 @@ class ContentInputFixtureDeviceTest {
                     }
                 }
             }
-            NuphosTheme { CompositionLocalProvider(LocalAgentStore provides store) {
+            NuphosTheme { CompositionLocalProvider(LocalAgentStore provides store, ai.nuphos.android.ui.LocalAuthSession provides (androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ai.nuphos.android.NuphosApplication).authSession) {
                 ChatComposer(isStreaming = streaming, draft = lease.value, onSend = { sent = it; true })
             } }
         }
