@@ -234,12 +234,10 @@ fun HomeRoute(
                 text = { Text(message) }, confirmButton = { TextButton(onClick = { linkError = null }) { Text("OK") } })
         }
         val notifications = (LocalContext.current.applicationContext as ai.nuphos.android.NuphosApplication).localNotifications
-        val pendingNotification by notifications.pending.value.collectAsState()
         val notificationAuth = LocalAuthSession.current
-        val notificationAiAllowed = notificationAuth.aiAllowed
-        LaunchedEffect(pendingNotification, user.id, agentStore.selectedTeam?.id, notificationAiAllowed) {
-            val target = notifications.pending.take(notificationAuth.user?.id, agentStore.selectedTeam?.id, notificationAuth.aiAllowed)
-            if (target != null) nav.navigate("conversation/${android.net.Uri.encode(target.sessionId)}") { launchSingleTop = true }
+        ai.nuphos.android.notifications.NotificationNavigationEffect(notifications.pending,
+            notificationAuth.user?.id, agentStore.selectedTeam?.id, notificationAuth.aiAllowed) { target ->
+            nav.navigate("conversation/${android.net.Uri.encode(target.sessionId)}") { launchSingleTop = true }
         }
         ai.nuphos.android.ui.chat.IncomingShareSheet(nav)
         val entry by nav.currentBackStackEntryAsState()
