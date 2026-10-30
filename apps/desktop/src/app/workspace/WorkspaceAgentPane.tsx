@@ -284,6 +284,7 @@ export function WorkspaceAgentPane({
               onOpenLink={stableOpenSessionResource}
               onOpenSession={handleSessionChange}
               onOpenRequest={handleOpenRequest}
+              onChooseReply={replyTarget?.onChoose}
               requests={inputQueue.requests}
               requestsLoaded={inputQueue.loaded}
               requestsFailed={inputQueue.failed}
