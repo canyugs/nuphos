@@ -132,6 +132,12 @@ export type LocalAgentShareState = { share: LocalShareInput; ceiling: LocalShare
 /** Where a person's own conversation stands with the owner of a shared computer; null when never asked. */
 export type ShareApprovalStatus = 'pending' | 'approved' | 'denied' | null
 
+/** How long approving also trusts the teammate on this computer: their next conversations run unasked. */
+export type ShareTrustDuration = '8h' | 'always'
+
+/** A teammate the owner trusts on their computer; `expiresAt` null until taken back. */
+export type LocalShareTrust = { actorId: string; expiresAt: string | null }
+
 export type LocalShareApproval = {
   id: string
   deviceId: string

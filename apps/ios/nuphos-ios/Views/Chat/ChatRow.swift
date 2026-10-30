@@ -43,6 +43,8 @@ enum ChatRow: Identifiable, Equatable {
     case activity(text: String, live: Bool)
     /// The message being uploaded, before the server has it.
     case sending
+    /// A message the server never took, kept in place to retry or edit.
+    case failed
     case hint(id: String, text: String, isError: Bool)
     case event(id: String, event: ChatMessage.Event)
 
@@ -55,6 +57,7 @@ enum ChatRow: Identifiable, Equatable {
             return id
         case .activity: return "activity"
         case .sending: return "sending"
+        case .failed: return "failed"
         }
     }
 }

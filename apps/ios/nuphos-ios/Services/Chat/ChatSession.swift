@@ -189,7 +189,6 @@ final class ChatSession {
 
     // MARK: - Private
 
-    @ObservationIgnored var admissionCheck: (() throws -> Void)?
     private let token: String
     private var streamTask: Task<Void, Never>?
     /// The stream only follows a run already going, so nothing is lost by closing it.
@@ -399,11 +398,9 @@ final class ChatSession {
         let progress = sending!.progress
         sending?.task = Task {
             do {
-                try await SubmissionAdmission.prepare(check: admissionCheck) {
-                    if !uploads.isEmpty {
-                        let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
-                        parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
-                    }
+                if !uploads.isEmpty {
+                    let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
+                    parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
                 }
                 sending = nil
                 let message = ChatMessage(role: .user, parts: parts)
@@ -417,9 +414,30 @@ final class ChatSession {
     }
 
     var failedSubmission: ComposerSubmission?
+    /// The unsent message the composer takes back for editing.
+    var editingSubmission: ComposerSubmission?
+
+    /// Sends the unsent message again as it was.
+    func retryFailed() {
+        guard let submission = failedSubmission else { return }
+        failedSubmission = nil
+        guard canSubmit else { failedSubmission = submission; return }
+        error = nil
+        send(submission)
+    }
+
+    /// Moves the unsent message back into the composer.
+    func editFailed() {
+        guard let submission = failedSubmission else { return }
+        failedSubmission = nil
+        error = nil
+        editingSubmission = submission
+    }
 
     /// Only restore a request rejected before admission, never a resumed turn.
-    private func rejectOversizedSubmission(_ pending: (id: String, submission: ComposerSubmission)?) {
+    /// Left in the transcript, a message the server never stored would ride
+    /// along with the next send, which the server refuses as a batch.
+    private func rejectUnadmittedSubmission(_ pending: (id: String, submission: ComposerSubmission)?) {
         guard let pending else { return }
         failedSubmission = pending.submission
         messages.removeAll { $0.id == pending.id }
@@ -931,6 +949,14 @@ final class ChatSession {
         adoptTranscript(from: detail)
     }
 
+    /// Replaces the transcript with the server's, even when it holds fewer
+    /// messages than this one.
+    private func adoptServerTranscript() async {
+        guard let detail = try? await NuphosAPI.conversationDetail(token: token, teamId: teamId, sessionId: sessionId) else { return }
+        messages = detail.messages
+        baseIndex = detail.messagesFirstIndex ?? 0
+    }
+
     private func adoptTranscript(from detail: AgentConversationDetail) {
         serverTail = ServerTail(detail)
         let serverTotal = (detail.messagesFirstIndex ?? 0) + detail.messages.count
@@ -1074,8 +1100,6 @@ final class ChatSession {
 
             do {
                 defer { applyFrames(backlog.flush()) }
-                try Task.checkCancellation()
-                try admissionCheck?()
                 let request = try AgentChatAPI.chatRequest(token: token, body: body)
                 debugLog("POST /agent/chat stream=\(options.streamId.prefix(8)) resume=\(shouldResume) from=\(resumeFrom) msgs=\(window.messages.count) base=\(window.baseIndex)")
                 for try await event in SSEClient.events(for: request) {
@@ -1132,11 +1156,11 @@ final class ChatSession {
             } catch let urlError as URLError where urlError.code == .cancelled {
                 return .aborted
             } catch is ChatPayload.TooLarge {
-                if !accepted && !shouldResume && reconnects == 0 { rejectOversizedSubmission(options.submission) }
+                if !accepted && !shouldResume && reconnects == 0 { rejectUnadmittedSubmission(options.submission) }
                 return .failed(ChatPayload.tooLargeMessage)
             } catch SSEClient.Failure.badStatus(let status, let bodyText) {
                 if status == 413 {
-                    if !accepted && !shouldResume && reconnects == 0 { rejectOversizedSubmission(options.submission) }
+                    if !accepted && !shouldResume && reconnects == 0 { rejectUnadmittedSubmission(options.submission) }
                     return .failed(ChatPayload.tooLargeMessage)
                 }
                 debugLog("HTTP \(status): \(bodyText ?? "")")
@@ -1161,7 +1185,18 @@ final class ChatSession {
                     try? await Task.sleep(for: backoff(gatewayRetries, base: 0.7, max: 5))
                     if !isNativeRuntime && !options.explicitResume { forceFresh = true; resumeFrom = 0 } else { reconnects += 1 }
                     continue
+                // The runtime refused the start and the server put the message back
+                // in its queue: it was not refused, so it is not a failed send.
+                case .other(let code, _, _) where code == "message_queued":
+                    return .queued
+                case .other(let code, _, _) where code == "invalid_message_batch" && !accepted:
+                    // Messages here the server never stored: take the server's transcript.
+                    rejectUnadmittedSubmission(options.submission)
+                    await adoptServerTranscript()
+                    return .failed("This agent changed elsewhere and was reloaded. Retry to send your message.")
                 default:
+                    // Only a send the server refused, never one it queued or already runs.
+                    if !accepted && !shouldResume && reconnects == 0 { rejectUnadmittedSubmission(options.submission) }
                     return .failed(conflict.localizedDescription)
                 }
             } catch SSEClient.Failure.frameTimeout {

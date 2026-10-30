@@ -2,11 +2,9 @@ import Foundation
 
 /// The launch check opens Home from the cache and asks `/auth/me` behind it,
 /// so its answer can arrive after the user has signed out or in again.
-@main @MainActor struct AuthSessionTests {
+@main struct AuthSessionTests {
     static func main() async {
-        await aCachedHomeReceivesVerifiedSharingOwner()
         await aLateRejectionKeepsANewSignIn()
-        await aLateSuccessKeepsANewSharedSignIn()
         await aLateRejectionAfterSignOutStaysSignedOut()
         await aLateFailureAfterSignOutShowsNoError()
         await aLateAnswerAfterSignOutStaysSignedOut()
@@ -17,8 +15,7 @@ import Foundation
 
     /// Starts a launch with a saved token and a cached user; the returned
     /// closure answers its `/auth/me`.
-    private static func launch(_ session: AuthSession) async -> (Result<NuphosUser, Error>) async -> Void {
-        SharedShareSession.publishedToken = nil
+    private static func launch(_ session: AuthSession) async -> (Result<NuphosUser, Error>) -> Void {
         Keychain.items = [AuthSession.tokenKey: "old"]
         LaunchCache.user = .init(user: cached, aiConsentVersion: AccountAPI.aiConsentVersion)
         var answer: CheckedContinuation<NuphosUser, Error>?
@@ -26,24 +23,14 @@ import Foundation
             guard token == "old" else { return NuphosUser(id: "u-\(token)", email: "", name: "", username: "", avatarURL: "") }
             return try await withCheckedThrowingContinuation { answer = $0 }
         }
-        let restoring = Task { await session.restore() }
+        Task { await session.restore() }
         while answer == nil { await Task.yield() }
         precondition(session.state == .signedIn(cached)) // Home is open from the cache.
-        return { result in
-            answer?.resume(with: result)
-            await restoring.value
-        }
+        return { answer?.resume(with: $0) }
     }
 
-    private static func aCachedHomeReceivesVerifiedSharingOwner() async {
-        let session = AuthSession()
-        let reply = await launch(session)
-        // This is the same cached signed-in state that lets Home create its store.
-        precondition(session.user?.id == cached.id)
-        precondition(session.sharingLoginID == nil)
-        await reply(.success(cached))
-        precondition(session.sharingLoginID != nil)
-        precondition(SharedShareSession.publishedToken == "old")
+    private static func settle() async {
+        for _ in 0..<100 { await Task.yield() }
     }
 
     private static func aLateRejectionKeepsANewSignIn() async {
@@ -53,24 +40,11 @@ import Foundation
         AccountAPI.signInToken = "new"
         try? await session.emailSignIn(email: "a@example.com", credential: "123456", password: false)
         precondition(session.token == "new")
-        await reply(.failure(NuphosAPI.Failure.unauthorized))
+        reply(.failure(NuphosAPI.Failure.unauthorized))
+        await settle()
         precondition(session.token == "new")
         precondition(Keychain.items[AuthSession.tokenKey] == "new")
         precondition(session.user?.id == "u-new")
-        precondition(SharedShareSession.publishedToken == "new")
-    }
-
-    private static func aLateSuccessKeepsANewSharedSignIn() async {
-        let session = AuthSession()
-        let reply = await launch(session)
-        session.signOut()
-        AccountAPI.signInToken = "new"
-        try? await session.emailSignIn(email: "a@example.com", credential: "123456", password: false)
-        precondition(SharedShareSession.publishedToken == "new")
-        await reply(.success(cached))
-        precondition(session.token == "new")
-        precondition(session.user?.id == "u-new")
-        precondition(SharedShareSession.publishedToken == "new", "late restore must not replace the new shared sign-in")
     }
 
     private static func aLateRejectionAfterSignOutStaysSignedOut() async {
@@ -78,7 +52,8 @@ import Foundation
         let reply = await launch(session)
         session.signOut()
         precondition(LaunchCache.user == nil)
-        await reply(.failure(NuphosAPI.Failure.unauthorized))
+        reply(.failure(NuphosAPI.Failure.unauthorized))
+        await settle()
         precondition(session.state == .signedOut(error: nil))
     }
 
@@ -86,7 +61,8 @@ import Foundation
         let session = AuthSession()
         let reply = await launch(session)
         session.signOut()
-        await reply(.failure(URLError(.notConnectedToInternet)))
+        reply(.failure(URLError(.notConnectedToInternet)))
+        await settle()
         precondition(session.state == .signedOut(error: nil))
     }
 
@@ -94,9 +70,9 @@ import Foundation
         let session = AuthSession()
         let reply = await launch(session)
         session.signOut()
-        await reply(.success(cached))
+        reply(.success(cached))
+        await settle()
         precondition(session.state == .signedOut(error: nil))
         precondition(session.user == nil)
-        precondition(SharedShareSession.publishedToken == nil, "late restore must not resurrect shared sign-in")
     }
 }

@@ -28,7 +28,5 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
-	<key>NuphosSharedKeychainGroup</key>
-	<string>$(AppIdentifierPrefix)ai.nuphos.ios.shared-auth</string>
 </dict>
 </plist>

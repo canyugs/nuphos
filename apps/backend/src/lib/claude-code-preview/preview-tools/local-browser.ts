@@ -62,6 +62,9 @@ const browserTool: DeviceTool = {
 const definition = {
   name: 'local_browser',
   description:
+    'The Nuphos browser: use it whenever the user asks to open a browser, a page or a website, also on a computer with its own desktop. ' +
+    'A site or app named by the user ("open up TikTok") means its official URL (https://www.tiktok.com); search the web if unsure, then open it in the same turn, never an empty tab. ' +
+    'When a task needs the user to sign in or sign up somewhere, open that login or sign-up page here yourself, sub-agents included, and say what to do on it; the user types their own password and passes human checks, never you. ' +
     "Operate this conversation's browser tabs inside the user's Nuphos Desktop workspace (the in-app browser, not Chrome or Safari): open a page in a new tab in this conversation's dock, list the tabs this conversation opened, navigate, run JavaScript in a page, or take a screenshot. " +
     'Pages keep the logins the user made in the in-app browser. Start with action "open" (or "tabs"), then pass the returned tab id. ' +
     'eval runs `script` in the page as a user gesture and returns its JSON-serializable value (an awaited Promise for async code): read the DOM, click, fill inputs (dispatch input events for frameworks). ' +
@@ -80,7 +83,7 @@ const definition = {
       device: {
         type: 'string',
         description:
-          'deviceId to run on. Omit it when only one device is available; otherwise the error lists the current device ids.',
+          "deviceId to run on. Omit it to use the user's own screen (their one selected device that is not a Nuphos computer); otherwise the error lists the current device ids.",
       },
     },
     required: ['action'],
