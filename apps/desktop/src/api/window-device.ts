@@ -18,8 +18,10 @@ import type {
   LocalRuntimeState,
   LocalAgentShareState,
   LocalShareApproval,
+  LocalShareTrust,
   ShareApprovalStatus,
   LocalShareInput,
+  ShareTrustDuration,
 } from './device-types.ts'
 
 export type WindowDeviceApi = {
@@ -75,7 +77,13 @@ export type WindowDeviceApi = {
   ): Promise<LocalAgentShareState>
   localShareApprovals(teamId: string): Promise<LocalShareApproval[]>
   localShareStatus(sessionId: string): Promise<ShareApprovalStatus>
-  localShareDecide(approvalId: string, approve: boolean): Promise<{ id: string; status: string }>
+  localShareDecide(
+    approvalId: string,
+    approve: boolean,
+    trust?: ShareTrustDuration,
+  ): Promise<{ id: string; status: string }>
+  localShareTrusts(deviceId: string, teamId: string): Promise<LocalShareTrust[]>
+  localShareUntrust(deviceId: string, teamId: string, actorId: string): Promise<void>
   /** Tells the owner about a new request in a system notification, once per request. */
   localShareNotify(approvalId: string, teamId: string, title: string, body: string): Promise<void>
   boxDesktop(deviceId: string, teamId: string): Promise<{ url: string; label: string }>
