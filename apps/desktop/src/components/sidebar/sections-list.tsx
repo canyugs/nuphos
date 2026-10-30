@@ -206,9 +206,8 @@ export function SidebarSectionList({
                             navigateOnRelease={Boolean(rowSessionId)}
                             onClick={(event) => {
                               if (!item.enabled) return
-                              // cmd/ctrl-click opens beside the current page, the
-                              // way it does everywhere else; a plain click still
-                              // navigates in place.
+                              // cmd/ctrl-click opens beside the current page, as it does
+                              // everywhere else; a plain click still navigates in place.
                               const newTab = event.metaKey || event.ctrlKey
 
                               if (item.onActivate) item.onActivate(newTab)
@@ -216,6 +215,7 @@ export function SidebarSectionList({
                               else onSelect(item.key)
                             }}
                             label={item.label}
+                            animateLabel={chatRow}
                             note={done.length ? <FinishedThreadsBadge threads={done} /> : undefined}
                             badge={item.badge}
                             trailing={
