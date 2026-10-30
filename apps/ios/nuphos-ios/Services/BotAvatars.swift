@@ -32,7 +32,10 @@ enum BotAvatars {
         "26-the-swing.svg",
         "27-the-astronomer.svg",
         "28-the-sleeping-gypsy.svg",
+        "29-amelia-earhart.svg",
     ]
+    /// Only the first 28 are derived from an ID, so appending a character never changes an Agent's face.
+    static let defaultCount = 28
 
     static func file(for id: String) -> String {
         var hash: UInt32 = 2166136261
@@ -41,7 +44,7 @@ enum BotAvatars {
             let unit = scalar.value > 0xFFFF ? 0xD800 + ((scalar.value - 0x10000) >> 10) : scalar.value
             hash = (hash ^ unit) &* 16777619
         }
-        return files[Int(hash % UInt32(files.count))]
+        return files[Int(hash % UInt32(defaultCount))]
     }
 
     static func asset(for id: String) -> String {
