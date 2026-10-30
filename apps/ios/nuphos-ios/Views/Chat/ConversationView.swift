@@ -2,11 +2,9 @@ import SwiftUI
 
 /// The chat screen: transcript rows, activity, approvals, and the composer.
 struct ConversationView: View {
-    @Environment(AuthSession.self) private var auth
     @Bindable var session: ChatSession
     /// First message for a brand-new chat, sent once the view appears.
     var initialPrompt: ComposerSubmission?
-    var temporaryDirectory: URL = FileManager.default.temporaryDirectory
     /// Top-level page that presented this chat, used by navigation diagnostics.
     var sourcePage = HomePage.agent.rawValue
 
@@ -33,6 +31,8 @@ struct ConversationView: View {
     @State private var renamedTitle = ""
     @State private var showRuntimes = false
     @State private var showShare = false
+    /// The desktop open from this conversation: beside it where the window is wide, else full screen.
+    @State private var desktop: DesktopSession?
     @State private var referencedAgents = ReferencedAgents()
 
     private var rows: [ChatRow] { ChatRow.rows(for: session) }
@@ -64,6 +64,7 @@ struct ConversationView: View {
             #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .desktop($desktop)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .background(Theme.chatCanvas)
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -130,6 +131,9 @@ struct ConversationView: View {
                             } label: {
                                 Label(watching ? "Unwatch" : "Watch", systemImage: watching ? "bell.slash" : "bell")
                             }
+                        }
+                        if session.canOpenDesktop {
+                            Button("Desktop", systemImage: "display") { desktop = session.makeDesktop() }
                         }
                         if session.ownsChat {
                             Button("Rename", systemImage: "pencil") { renamedTitle = session.title; showRename = true }
@@ -316,8 +320,6 @@ struct ConversationView: View {
                     }
                 ),
                 voiceTeamId: session.teamId,
-                voiceToken: auth.token,
-                temporaryDirectory: temporaryDirectory,
                 onSend: { session.send($0) },
                 onStop: { session.stop() }
             ) {

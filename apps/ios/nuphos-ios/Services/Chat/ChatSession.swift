@@ -95,6 +95,14 @@ final class ChatSession {
     private let observations = RuntimeObservations.shared
     var runtimeObservation: RuntimeObservation? { observations.value(team: teamId, session: sessionId) }
     var isStreaming: Bool { isNativeRuntime ? runtimeObservation?.executing == true : transportStreaming }
+    /// The owner can open this conversation's desktop: its runtime is a Box, or a
+    /// Mac that allows phone control, and says it can show one or already does.
+    var canOpenDesktop: Bool {
+        guard ownsChat, let snapshot = runtimeObservation?.snapshot else { return false }
+        return snapshot["canOpenDesktop"]?.boolValue == true
+            || snapshot["tools"]?.arrayValue?.contains { $0["kind"]?.stringValue == "desktop" } == true
+    }
+    func makeDesktop() -> DesktopSession { DesktopSession(teamId: teamId, sessionId: sessionId, token: token) }
     var runtimeStatus: String? {
         if submitting || awaitingAdmission { return "Sending…" }
         guard isNativeRuntime, !isNew else { return nil }
@@ -189,7 +197,6 @@ final class ChatSession {
 
     // MARK: - Private
 
-    @ObservationIgnored var admissionCheck: (() throws -> Void)?
     private let token: String
     private var streamTask: Task<Void, Never>?
     /// The stream only follows a run already going, so nothing is lost by closing it.
@@ -399,11 +406,9 @@ final class ChatSession {
         let progress = sending!.progress
         sending?.task = Task {
             do {
-                try await SubmissionAdmission.prepare(check: admissionCheck) {
-                    if !uploads.isEmpty {
-                        let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
-                        parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
-                    }
+                if !uploads.isEmpty {
+                    let upload = try await WorkspaceAPI.upload(token: token, team: teamId, attachments: uploads, progress: progress)
+                    parts.append(isNativeRuntime ? upload.part : .text(.init(text: upload.instruction, state: .done)))
                 }
                 sending = nil
                 let message = ChatMessage(role: .user, parts: parts)
@@ -1103,8 +1108,6 @@ final class ChatSession {
 
             do {
                 defer { applyFrames(backlog.flush()) }
-                try Task.checkCancellation()
-                try admissionCheck?()
                 let request = try AgentChatAPI.chatRequest(token: token, body: body)
                 debugLog("POST /agent/chat stream=\(options.streamId.prefix(8)) resume=\(shouldResume) from=\(resumeFrom) msgs=\(window.messages.count) base=\(window.baseIndex)")
                 for try await event in SSEClient.events(for: request) {
