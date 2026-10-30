@@ -76,6 +76,8 @@ export type WindowDeviceApi = {
   localShareApprovals(teamId: string): Promise<LocalShareApproval[]>
   localShareStatus(sessionId: string): Promise<ShareApprovalStatus>
   localShareDecide(approvalId: string, approve: boolean): Promise<{ id: string; status: string }>
+  /** Tells the owner about a new request in a system notification, once per request. */
+  localShareNotify(approvalId: string, teamId: string, title: string, body: string): Promise<void>
   boxDesktop(deviceId: string, teamId: string): Promise<{ url: string; label: string }>
   openSessionDesktop(teamId: string, sessionId: string): Promise<{ display: number }>
   boxUsage(teamId: string): Promise<BoxUsage>

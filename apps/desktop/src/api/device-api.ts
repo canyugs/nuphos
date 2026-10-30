@@ -62,6 +62,8 @@ export const deviceApi = {
   localShareStatus: (sessionId: string) => window.api.localShareStatus(sessionId),
   localShareDecide: (approvalId: string, approve: boolean) =>
     window.api.localShareDecide(approvalId, approve),
+  localShareNotify: (approvalId: string, teamId: string, title: string, body: string) =>
+    window.api.localShareNotify(approvalId, teamId, title, body),
   boxUsage: (teamId: string) => window.api.boxUsage(teamId),
   boxUsageHistory: (teamId: string, range: '1d' | '7d' | '30d') =>
     window.api.boxUsageHistory(teamId, range),

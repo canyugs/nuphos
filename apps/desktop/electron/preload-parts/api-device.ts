@@ -83,6 +83,8 @@ export const deviceApi = {
   localShareStatus: (sessionId: string) => ipcRenderer.invoke('localShare:status', sessionId),
   localShareDecide: (approvalId: string, approve: boolean) =>
     ipcRenderer.invoke('localShare:decide', approvalId, approve),
+  localShareNotify: (approvalId: string, teamId: string, title: string, body: string) =>
+    ipcRenderer.invoke('localShare:notify', approvalId, teamId, title, body),
   boxUsage: (teamId: string) => ipcRenderer.invoke('box:usage', teamId),
   boxUsageHistory: (teamId: string, range: string) =>
     ipcRenderer.invoke('box:usageHistory', teamId, range),

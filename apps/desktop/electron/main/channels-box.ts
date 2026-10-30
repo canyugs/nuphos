@@ -150,4 +150,25 @@ export const boxChannels = {
 
     return decideShareApproval(string(approvalId), approve)
   },
+  'localShare:notify': async (
+    _e: unknown,
+    approvalId: unknown,
+    teamId: unknown,
+    title: unknown,
+    body: unknown,
+  ) => {
+    // Loaded on use: both reach into Electron, which this module's tests do not load.
+    const [{ notifyShareApproval }, { handleDeepLink }] = await Promise.all([
+      import('../agent/notify.ts'),
+      import('./deep-links.ts'),
+    ])
+    const inbox = encodeURIComponent(`/teams/${encodeURIComponent(string(teamId))}/inbox`)
+
+    notifyShareApproval({
+      approvalId: string(approvalId),
+      title: string(title),
+      body: string(body),
+      openInbox: () => handleDeepLink(`nuphos://open?path=${inbox}`),
+    })
+  },
 }
