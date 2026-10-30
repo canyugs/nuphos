@@ -347,7 +347,8 @@ fun ChatComposer(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer); voice.cancel() }
     }
-    LaunchedEffect(effectiveDraftingEnabled, canSubmit) { if (!effectiveDraftingEnabled || !canSubmit) { attachmentJob?.cancel(); voice.cancel() } }
+    LaunchedEffect(effectiveDraftingEnabled) { if (!effectiveDraftingEnabled) attachmentJob?.cancel() }
+    LaunchedEffect(effectiveDraftingEnabled, canSubmit) { if (!effectiveDraftingEnabled || !canSubmit) voice.cancel() }
     BackHandler(enabled = voice.active) { voice.cancel() }
     voice.error?.let { message ->
         AlertDialog(onDismissRequest = { voice.error = null }, title = { Text("Voice input failed") },
@@ -365,8 +366,14 @@ fun ChatComposer(
         }
     }
 
+    // Picker results and suspended reads belong to the exact draft/access scope that started them.
+    val selectionScope = remember(draft, effectiveDraftingEnabled, voiceAuth.generation, voiceAuth.user?.id,
+        store.workspaceRevision, store.selectedTeam?.id, ai.nuphos.android.session.AiAccess.revision) { Any() }
+    val latestSelectionScope by rememberUpdatedState(selectionScope)
+    val latestDraftingAllowed by rememberUpdatedState(effectiveDraftingEnabled && !savingSend)
+    var pickerTarget by remember { mutableStateOf<Any?>(null) }
     fun loadSelection(uris: List<Uri>, images: Boolean, permissionOwner: Any? = null) {
-        if (!effectiveDraftingEnabled || savingSend || !canSubmit || voice.active) return
+        if (!effectiveDraftingEnabled || savingSend || voice.active) return
         if (picking) { pickerError = "Wait for the current files to finish loading, then try again."; return }
         if (uris.isEmpty()) return
         picking = true
@@ -383,6 +390,9 @@ fun ChatComposer(
                         existing, inputs, check = { work.ensureActive() }, prepareImage = ::loadImage,
                     )
                 }
+                check(latestSelectionScope === selectionScope && latestDraftingAllowed) {
+                    "The draft changed while reading files. Select the files again."
+                }
                 AttachmentTransfers().retain(attachments.toList() + loaded)
                 attachments.addAll(loaded)
             } catch (e: Exception) {
@@ -395,11 +405,21 @@ fun ChatComposer(
             }
         }
     }
-    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { loadSelection(it, true) }
-    val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { loadSelection(it, false) }
+    fun pickerResult(uris: List<Uri>, images: Boolean) {
+        val target = pickerTarget
+        pickerTarget = null
+        if (uris.isEmpty()) return
+        if (target !== selectionScope || !effectiveDraftingEnabled || savingSend || voice.active) {
+            pickerError = "The draft changed while choosing files. Select the files again."
+            return
+        }
+        loadSelection(uris, images)
+    }
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { pickerResult(it, true) }
+    val files = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { pickerResult(it, false) }
 
     val receiveContent = ReceiveContentListener { content ->
-        if (!effectiveDraftingEnabled || !canSubmit || voice.active) content else {
+        if (!effectiveDraftingEnabled || voice.active) content else {
             val uris = mutableListOf<Uri>()
             val remaining = content.consume { item ->
                 val uri = item.uri
@@ -737,11 +757,11 @@ fun ChatComposer(
                     Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = { photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
-                        enabled = canSubmit && !picking && !voice.active, modifier = Modifier.size(40.dp)) {
+                    IconButton(onClick = { pickerTarget = selectionScope; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                        enabled = effectiveDraftingEnabled && !savingSend && !picking && !voice.active, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Outlined.Photo, "Photos")
                     }
-                    IconButton(onClick = { files.launch("*/*") }, enabled = canSubmit && !picking && !voice.active,
+                    IconButton(onClick = { pickerTarget = selectionScope; files.launch("*/*") }, enabled = effectiveDraftingEnabled && !savingSend && !picking && !voice.active,
                         modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.AttachFile, "Files") }
                     IconButton(onClick = {
                         try {
@@ -760,7 +780,7 @@ fun ChatComposer(
                             if (pasted.isNotEmpty()) updateText(text + pasted)
                             if (uris.isNotEmpty()) loadSelection(uris, false, clip)
                         } catch (_: Exception) { pickerError = "Could not paste this item. Try choosing it from Files." }
-                    }, enabled = canSubmit && !picking && !voice.active, modifier = Modifier.size(40.dp)) {
+                    }, enabled = effectiveDraftingEnabled && !savingSend && !picking && !voice.active, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Outlined.ContentPaste, "Paste")
                     }
                     Spacer(Modifier.weight(1f))
