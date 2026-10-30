@@ -1,9 +1,20 @@
 import clsx from 'clsx'
-import { ArrowLeft, ArrowRight, Globe, MessageSquarePlus, RotateCw, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Globe,
+  ExternalLink,
+  SquareDashedMousePointer,
+  RotateCw,
+  X,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import { api } from '../api'
 import { PageMeta } from '../app/pageMeta'
 import { BrowserLoadingProgress } from '../components/BrowserLoadingProgress'
+import { toast } from '../components/ui/toast'
+import { Tooltip } from '../components/ui/tooltip'
 import { useCurrentUser } from '../hooks/useCurrentUser'
 import { useWorkspaceTab } from '../hooks/useWorkspaceTab'
 import { BROWSER_HOME_URL, normalizeBrowserUrl } from '../lib/browserUrl'
@@ -210,16 +221,39 @@ export function BrowserView({
           {onComment && (
             <button
               type="button"
-              className={clsx(buttonClass, comments.active && 'bg-zGray-800 text-main')}
+              className={clsx(
+                buttonClass,
+                'ml-1 outline-none focus-visible:ring-2 focus-visible:ring-zViolet-accent',
+                comments.active &&
+                  '!bg-zViolet-accent/15 !text-zViolet-accent ring-1 ring-inset ring-zViolet-accent/40 hover:!bg-zViolet-accent/25',
+              )}
               disabled={!ready}
               onClick={comments.toggle}
               aria-pressed={comments.active}
               aria-label="Comment on the page"
-              title={comments.active ? 'Exit comment mode (Esc)' : 'Comment on the page'}
             >
-              <MessageSquarePlus className="h-3.5 w-3.5" />
+              <SquareDashedMousePointer className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
+          <Tooltip content="Open in external browser" side="bottom">
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={!ready}
+              onClick={() => {
+                const currentUrl = viewRef.current?.getURL()
+
+                if (currentUrl && /^https?:\/\//i.test(currentUrl)) {
+                  void api.appOpenExternal(currentUrl).catch(() => {
+                    toast.error('Could not open the external browser')
+                  })
+                }
+              }}
+              aria-label="Open in external browser"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
           <BrowserLoadingProgress loading={loading} failed={error !== null} />
         </form>
         {error && (
@@ -232,11 +266,6 @@ export function BrowserView({
         )}
         <div className="relative min-h-0 flex-1">
           <div ref={hostRef} className="h-full" />
-          {comments.active && !comments.draft && (
-            <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-full bg-zGray-900/90 px-3 py-1 text-xs text-secondary shadow">
-              Click an element to comment · Esc to exit
-            </div>
-          )}
           {comments.draft && (
             <BrowserCommentBox
               key={comments.draft.selector}
