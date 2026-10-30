@@ -1,9 +1,8 @@
 import { AlarmClock, Loader2 } from 'lucide-react'
-import { Fragment, useEffect, useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 
 import { t } from '../../../i18n'
 import { runtimeAllows, runtimeIsExecuting } from '../../../lib/runtimeExecution'
-import { publishSessionDesktops } from '../../../lib/sessionDesktops'
 import { useReportVisibleError } from '../../VisibleErrorReporter'
 import {
   useOpenRequestedArtifact,
@@ -18,11 +17,11 @@ import { DecisionAnswersContext, decisionAnswers } from './decisionAnswers'
 import { AgentHomeAnimation } from './homeAnimation'
 import { CollapsedWorkView, LoadingText } from './partChrome'
 import { collapseRepeatedFailures } from './repeatedFailures'
-import { sessionDesktopsOf } from './shells'
 import { DEFERRED_MESSAGE_STYLE } from './status'
 import { MovingSessionLine, TimelineEventLine } from './TimelineEventLine'
 import { placeTimelineEvents } from './timelineEvents'
 import { UserMessage } from './UserMessage'
+import { useSessionDesktops } from './useSessionDesktops'
 import { useTransferDownloads } from './useTransferDownloads'
 
 import type { ConversationProps } from './conversationProps'
@@ -74,11 +73,7 @@ function MessageList({
   onRequestFeedbackComment: (messageId: string) => void
 }) {
   useReportVisibleError(tab.error, 'agent_conversation_error')
-  // The workspace turns these into dock tabs; a chat that leaves the screen is forgotten, not closed.
-  useEffect(() => {
-    if (teamId) publishSessionDesktops(tab.sessionId, sessionDesktopsOf(teamId, tab))
-  }, [tab.sessionId, teamId, tab.runtimeState, tab.foreign])
-  useEffect(() => () => publishSessionDesktops(tab.sessionId, null), [tab.sessionId])
+  useSessionDesktops(tab, teamId)
   usePublishSessionArtifacts(tab.sessionId, tab.messages)
   useOpenRequestedArtifact(tab.sessionId, teamId, onOpenNuphosLink)
   const downloadsByMessage = useTransferDownloads(tab, teamId, hasEarlier)
