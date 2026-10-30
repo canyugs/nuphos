@@ -299,7 +299,7 @@ struct ConversationView: View {
                 sendsDuringTurn: session.isNativeRuntime && !session.sendQueues,
                 canSteer: session.canSteer,
                 allowsAttachments: !session.canSteer,
-                failedSubmission: $session.failedSubmission,
+                editRequest: $session.editingSubmission,
                 mentions: MentionSource(
                     teamId: session.teamId,
                     // Only someone who may change the session's devices can bring one in.
@@ -381,7 +381,7 @@ struct ConversationView: View {
     private func rowSpacing(_ row: ChatRow) -> CGFloat {
         switch row {
         case .assistantText: 28
-        case .user, .sending: 22
+        case .user, .sending, .failed: 22
         case .timestamp: 14
         case .reasoning, .tool, .toolRun, .work, .memory, .memoryRecall, .downloads: 14
         case .activity, .hint, .event: 18
@@ -428,6 +428,10 @@ struct ConversationView: View {
         case .sending:
             if let sending = session.sending {
                 SendingBubble(submission: sending.submission, progress: sending.progress, onCancel: session.cancelSending)
+            }
+        case .failed:
+            if let submission = session.failedSubmission {
+                FailedBubble(submission: submission, onRetry: session.retryFailed, onEdit: session.editFailed)
             }
         case .hint(_, let text, let isError):
             HintRow(text: text, isError: isError)
@@ -538,6 +542,41 @@ struct SendingBubble: View {
         // Nothing to upload, or every byte is out and the server is answering.
         guard progress.totalUnitCount > 0, progress.completedUnitCount < progress.totalUnitCount else { return "Sending…" }
         return "Uploading \(progress.completedUnitCount.formatted(.byteCount(style: .file))) of \(progress.totalUnitCount.formatted(.byteCount(style: .file)))"
+    }
+}
+
+/// A message the server never took, kept where it was sent as messaging apps
+/// do: marked as not sent, to send again as it is or take back to edit.
+struct FailedBubble: View {
+    let submission: ComposerSubmission
+    let onRetry: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            HStack(spacing: 6) {
+                ForEach(submission.attachments.prefix(4)) { attachment in
+                    AttachmentPreview(attachment: attachment)
+                        .frame(width: 96, height: 96)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+            }
+            if !submission.text.isEmpty {
+                PlainMessageText(text: MessagePreview.head(of: submission.text) ?? submission.text, selectable: false)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(Theme.bubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            HStack(spacing: 14) {
+                Label("Not sent", systemImage: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+                Button("Retry", action: onRetry)
+                Button("Edit", action: onEdit)
+            }
+            .font(Theme.Text.label)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.leading, 56)
     }
 }
 
