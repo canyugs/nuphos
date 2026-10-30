@@ -1,5 +1,6 @@
 import SwiftUI
 
+ #if !NUPHOS_SHARE_EXTENSION
 @main
 struct NuphosApp: App {
     #if canImport(UIKit)
@@ -24,6 +25,8 @@ struct NuphosApp: App {
         .commands { NewChatCommand() }
     }
 }
+
+#endif
 
 extension FocusedValues {
     /// Opens the new-chat composer in the focused window.
