@@ -54,6 +54,8 @@
   "A computer plan gives your team cloud computers that run your agents 24/7, each with its own desktop, shared with your teammates.": "Un plan de computadoras le da a tu equipo computadoras en la nube que ejecutan tus agentes 24/7, cada una con su propio escritorio y compartida con tus compañeros.",
   "A full desktop in every computer": "Un escritorio completo en cada computadora",
   "A new computer needs {n} vCPU; {free} free.": "Una computadora nueva requiere {n} vCPU; hay {free} libres.",
+  "Answered by {name} · {time}": "Respondida por {name} · {time}",
+  "You answered · {time}": "Respondiste · {time}",
   "a private session": "una sesión privada",
   "A runtime loads at most {files} files and {mb} MB of personal skills, so the smallest skills go first and the rest stay on this computer. Edits to synced skills belong here: the next sync overwrites changes made in Nuphos.": "Un entorno de ejecución carga como máximo {files} archivos y {mb} MB de habilidades personales, así que primero van las habilidades más pequeñas y el resto se queda en esta computadora. Edita aquí las habilidades sincronizadas: la próxima sincronización sobrescribe los cambios hechos en Nuphos.",
   "A team": "Un equipo",

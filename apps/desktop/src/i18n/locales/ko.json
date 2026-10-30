@@ -54,6 +54,8 @@
   "A computer plan gives your team cloud computers that run your agents 24/7, each with its own desktop, shared with your teammates.": "컴퓨터 요금제를 이용하면 팀에서 에이전트를 24시간 실행하는 클라우드 컴퓨터를 사용할 수 있습니다. 각 컴퓨터에는 자체 데스크톱이 있으며 팀원과 공유됩니다.",
   "A full desktop in every computer": "모든 컴퓨터에 전체 데스크톱 제공",
   "A new computer needs {n} vCPU; {free} free.": "새 컴퓨터에는 {n} vCPU가 필요합니다. 남은 vCPU: {free}",
+  "Answered by {name} · {time}": "{name}님이 답변함 · {time}",
+  "You answered · {time}": "내가 답변함 · {time}",
   "a private session": "비공개 세션",
   "A runtime loads at most {files} files and {mb} MB of personal skills, so the smallest skills go first and the rest stay on this computer. Edits to synced skills belong here: the next sync overwrites changes made in Nuphos.": "런타임은 개인 스킬을 최대 파일 {files}개, {mb}MB까지 로드하므로 작은 스킬부터 가져오고 나머지는 이 컴퓨터에 남겨 둡니다. 동기화된 스킬은 여기에서 편집하세요. 다음 동기화 시 Nuphos에서 변경한 내용을 덮어씁니다.",
   "A team": "알 수 없는 팀",

@@ -14,6 +14,7 @@ import { conversationActivity } from './activity'
 import { AgentSetupRequiredCard } from './AgentSetupRequiredCard'
 import { AssistantMessage } from './AssistantMessage'
 import { toolAnchorIds } from './chatTarget'
+import { DecisionAnswersContext, decisionAnswers } from './decisionAnswers'
 import { AgentHomeAnimation } from './homeAnimation'
 import { CollapsedWorkView, LoadingText } from './partChrome'
 import { collapseRepeatedFailures } from './repeatedFailures'
@@ -27,7 +28,7 @@ import { useTransferDownloads } from './useTransferDownloads'
 import type { ConversationProps } from './conversationProps'
 import type { Message, Tab } from './model'
 
-export function ConversationMessageList({
+function MessageList({
   tab,
   teamId,
   currentUrl,
@@ -283,5 +284,16 @@ export function ConversationMessageList({
       )}
       <div className="h-px" />
     </div>
+  )
+}
+
+/** The transcript; each choice card reads its answer from the replies after it. */
+export function ConversationMessageList(props: Parameters<typeof MessageList>[0]) {
+  const answers = useMemo(() => decisionAnswers(props.tab.messages), [props.tab.messages])
+
+  return (
+    <DecisionAnswersContext.Provider value={answers}>
+      <MessageList {...props} />
+    </DecisionAnswersContext.Provider>
   )
 }

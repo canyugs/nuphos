@@ -54,6 +54,8 @@
   "A computer plan gives your team cloud computers that run your agents 24/7, each with its own desktop, shared with your teammates.": "电脑套餐为团队提供云端电脑，全天候运行你的 Agent。每台电脑都有独立桌面，并可与队友共享。",
   "A full desktop in every computer": "每台电脑都有完整桌面",
   "A new computer needs {n} vCPU; {free} free.": "新电脑需要 {n} vCPU，当前剩余 {free}。",
+  "Answered by {name} · {time}": "{name} 已回答 · {time}",
+  "You answered · {time}": "你已回答 · {time}",
   "a private session": "一个私密会话",
   "A runtime loads at most {files} files and {mb} MB of personal skills, so the smallest skills go first and the rest stay on this computer. Edits to synced skills belong here: the next sync overwrites changes made in Nuphos.": "运行环境最多加载 {files} 个文件、{mb} MB 的个人技能，因此会优先同步最小的技能，其余保留在此电脑上。请在此电脑上编辑已同步的技能：下次同步会覆盖在 Nuphos 中所做的更改。",
   "A team": "某个团队",

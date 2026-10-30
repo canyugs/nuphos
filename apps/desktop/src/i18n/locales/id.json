@@ -54,6 +54,8 @@
   "A computer plan gives your team cloud computers that run your agents 24/7, each with its own desktop, shared with your teammates.": "Paket komputer memberi tim Anda komputer cloud yang menjalankan agen Anda 24/7, masing-masing dengan desktopnya sendiri, dan dapat dibagikan dengan rekan tim.",
   "A full desktop in every computer": "Desktop lengkap di setiap komputer",
   "A new computer needs {n} vCPU; {free} free.": "Komputer baru memerlukan {n} vCPU; tersedia {free}.",
+  "Answered by {name} · {time}": "Dijawab oleh {name} · {time}",
+  "You answered · {time}": "Anda menjawab · {time}",
   "a private session": "sesi privat",
   "A runtime loads at most {files} files and {mb} MB of personal skills, so the smallest skills go first and the rest stay on this computer. Edits to synced skills belong here: the next sync overwrites changes made in Nuphos.": "Runtime memuat paling banyak {files} file dan {mb} MB skill pribadi, jadi skill terkecil didahulukan dan sisanya tetap di komputer ini. Edit skill yang disinkronkan di sini: sinkronisasi berikutnya akan menimpa perubahan yang dibuat di Nuphos.",
   "A team": "Sebuah tim",

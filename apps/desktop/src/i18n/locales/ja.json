@@ -54,6 +54,8 @@
   "A computer plan gives your team cloud computers that run your agents 24/7, each with its own desktop, shared with your teammates.": "コンピュータプランでは、エージェントを 24 時間 365 日実行するクラウドコンピュータをチームで利用できます。各コンピュータには専用のデスクトップがあり、チームメンバーと共有できます。",
   "A full desktop in every computer": "各コンピュータにフル機能のデスクトップ",
   "A new computer needs {n} vCPU; {free} free.": "新しいコンピュータには {n} vCPU が必要です（空き {free}）。",
+  "Answered by {name} · {time}": "{name} が回答 · {time}",
+  "You answered · {time}": "あなたが回答 · {time}",
   "a private session": "非公開のセッション",
   "A runtime loads at most {files} files and {mb} MB of personal skills, so the smallest skills go first and the rest stay on this computer. Edits to synced skills belong here: the next sync overwrites changes made in Nuphos.": "ランタイムが読み込める個人スキルは最大 {files} ファイル、{mb} MB のため、小さいスキルから順に取り込まれ、残りはこのコンピュータに残ります。同期したスキルはこちらで編集してください。Nuphos で行った変更は次回の同期で上書きされます。",
   "A team": "チーム",
