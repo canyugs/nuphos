@@ -909,6 +909,8 @@ private fun TrailingButton(
             modifier = Modifier.size(36.dp),
             shape = CircleShape,
             colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
             ),
         ) {
