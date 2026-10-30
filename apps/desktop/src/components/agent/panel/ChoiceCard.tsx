@@ -84,8 +84,8 @@ export function ChoiceCard({
               size="sm"
               className={clsx(
                 'h-auto min-h-7 gap-1.5 whitespace-normal px-2.5 py-1 text-left text-[12.5px]',
-                option === chosen &&
-                  'border-zViolet-accent/60 bg-zViolet-accent/10 disabled:opacity-100 data-[disabled]:opacity-100',
+                // Important: the disabled fade's order among variants is not fixed.
+                option === chosen && '!opacity-100 border-zViolet-accent/60 bg-zViolet-accent/10',
               )}
               disabled={!interactive}
               aria-pressed={chosen ? option === chosen : undefined}
