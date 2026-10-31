@@ -1,0 +1,8 @@
+{
+  "source": "04f8fa47ba51ace19eae8f5b45594a0340773397",
+  "apkSHA256": "b78a44d6dad4ed034991785a406c32d0da73d731181636a7fffb1c40383d704e",
+  "jvmTests": 481,
+  "failures": 0,
+  "silentUpgradedSocket": "deadline closed and reconnected watching",
+  "decoderFailure": "deterministic JVM failure cleanup once, visible Failed/Retry, retry without control; not an injected real codec failure on device"
+}

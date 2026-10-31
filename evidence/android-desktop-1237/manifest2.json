@@ -1,0 +1,16 @@
+{
+  "base": "7eb2923e3c83d6932a9af1478faf73ca94ccb424",
+  "head": "04f8fa47ba51ace19eae8f5b45594a0340773397",
+  "files": {
+    "apps/android/app/src/main/java/ai/nuphos/android/session/ChatSession.kt": "06fdfc53a257c3338de6ad1920bcbc92b8ba2e60482bf29f674aefa344a57c7c",
+    "apps/android/app/src/main/java/ai/nuphos/android/ui/chat/ConversationMenu.kt": "5e8176fd60efcdd4d9b69771c8bddfd4c98c791835fe105072a4d51a2f6aa9a9",
+    "apps/android/app/src/main/java/ai/nuphos/android/desktop/DesktopScreen.kt": "ca66a1ef42217534b2b3a1bc7dfc8fad857eab3b899658add599c31efeb24a93",
+    "apps/android/app/src/main/java/ai/nuphos/android/desktop/DesktopSession.kt": "24f5cb8b7404a1c72bdf6b5420031f338c9a334fbe83cf5a4da2fa67fa87d8d5",
+    "apps/android/app/src/main/java/ai/nuphos/android/desktop/DesktopVideo.kt": "cf722bd8f95c86c849a83e9adc4e0865df33cd056c0642ffea00eb7404aacb30",
+    "apps/android/app/src/main/java/ai/nuphos/android/desktop/RfbProtocol.kt": "f68be36653184fb453690847c88e2958713e1d8de2def288b33e70bbb9d7981a",
+    "apps/android/app/src/test/java/ai/nuphos/android/desktop/DesktopSessionTest.kt": "fc8b41c47a498fdb6613831410e1ad9bb2575e5c591deafd3837e278f2110876",
+    "apps/android/app/src/test/java/ai/nuphos/android/desktop/RfbProtocolTest.kt": "85e5ccb64dccd0e9294bb46f42e19d1c3c9877fcf2f465975b00647bbc2efd9b",
+    "apps/android/app/src/main/java/ai/nuphos/android/desktop/DesktopDecodeRecovery.kt": "01b56c3bafa3b6fe1091d63c3704e62beba795bb9806284eda30663f0b673a54",
+    "apps/android/app/src/test/java/ai/nuphos/android/desktop/DesktopRecoveryTest.kt": "d8aee4d5ab1766358adf36203ae4f004a49c142a7521a88e965a7c9d15436eda"
+  }
+}

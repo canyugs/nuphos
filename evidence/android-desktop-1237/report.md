@@ -1,3 +1,9 @@
+# Current recovery revision
+
+Source 04f8fa47ba51ace19eae8f5b45594a0340773397; minified APK SHA-256 `b78a44d6dad4ed034991785a406c32d0da73d731181636a7fffb1c40383d704e`. All 481 JVM tests pass. The reader now bounds total handshake, first-picture and partial-read progress separately from scoped cancellation. Periodic full updates and WebSocket pings check idle liveness. A decoder drain failure cleans up once, exposes Failed/Retry, and explicit retry resets the decoder and starts watching.
+
+Normal full-Root UI on this exact artifact accepted a silent synthetic WebSocket, reached the default handshake deadline, closed it and reconnected to the H.264 picture as watcher (`recovery-after-timeout.png`). Accepted partial-banner and scoped-cancel cases plus deterministic codec-failure cleanup/no-repeat/visible-error/watcher-retry are JVM tests; an actual hardware codec failure was not injected. The normal behavior and limits from the original operation revision remain documented below.
+
 # Android conversation desktop operation
 
 Source: PR #1237, signed 247539a9f3e1525ef27827ef0dab1dd5bdfab5d4, based on 7eb2923e.
