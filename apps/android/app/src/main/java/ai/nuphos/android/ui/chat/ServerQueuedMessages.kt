@@ -34,7 +34,7 @@ internal fun ServerQueuedMessages(queue: ServerQueueStore, writable: Boolean, ca
                     Text("${index + 1}. ${item.text}", maxLines = 3, style = MaterialTheme.typography.bodySmall)
                     Row {
                         val available = writable && queue.busy.isEmpty()
-                        TextButton(enabled = available, onClick = { scope.launch { queue.take(item.id, onRecall) } }) { Text("Edit") }
+                        TextButton(enabled = available && queue.recoveredText == null, onClick = { scope.launch { queue.take(item.id, onRecall) } }) { Text("Edit") }
                         TextButton(enabled = available, onClick = { scope.launch { queue.take(item.id) } }) { Text("Remove") }
                         TextButton(enabled = available && canSteer, onClick = { scope.launch { queue.sendIntoTurn(item.id) } }) { Text("Send into turn") }
                     }

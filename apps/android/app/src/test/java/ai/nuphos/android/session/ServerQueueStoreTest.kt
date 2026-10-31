@@ -101,4 +101,21 @@ class ServerQueueStoreTest {
         queue.restoreRecovered { true }
         assertNull(queue.recoveredText)
     }
+    @Test fun outstandingRecallCannotBeOverwrittenButExplicitRemovalStillWorks() = runTest {
+        val file = ai.nuphos.android.model.ChatPart.File("image/png", "original.png", "data:image/png;base64,YWJj")
+        val receipt = AgentChatApi.QueueRecall("First receipt", listOf(file))
+        val second = own.copy(id = "second")
+        val deleted = mutableListOf<String>()
+        val queue = store(read = { listOf(own, second) }, remove = { id -> deleted += id; receipt })
+        queue.refresh(); queue.take(own.id) { false }
+        queue.take(second.id) { fail("A second recall must be blocked"); true }
+        assertEquals(listOf(own.id), deleted)
+        assertEquals(receipt, queue.recoveredText)
+        queue.take(second.id) // Explicit Remove does not overwrite the retained recall.
+        assertEquals(listOf(own.id, second.id), deleted)
+        assertEquals(listOf(file), queue.recoveredText!!.files)
+        queue.restoreRecovered { assertEquals(receipt, it); true }
+        assertNull(queue.recoveredText)
+    }
+
 }

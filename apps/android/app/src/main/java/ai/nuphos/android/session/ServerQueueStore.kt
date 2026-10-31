@@ -45,7 +45,7 @@ internal class ServerQueueStore(
     }
 
     suspend fun take(id: String, restore: ((AgentChatApi.QueueRecall) -> Boolean)? = null) {
-        if (!current() || !writable() || busy.isNotEmpty() || items.none { it.id == id }) return
+        if (!current() || !writable() || busy.isNotEmpty() || items.none { it.id == id } || (restore != null && recoveredText != null)) return
         val epoch = ++revision
         reading = false
         busy = busy + id
@@ -56,7 +56,7 @@ internal class ServerQueueStore(
             error = null
             if (restore != null) {
                 recoveredText = text
-                if (restore(text)) recoveredText = null
+                if (writable() && restore(text)) recoveredText = null
             }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
