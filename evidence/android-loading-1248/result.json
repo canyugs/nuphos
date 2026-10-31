@@ -1,0 +1,22 @@
+{
+  "base": "42cdec16887a9f18fb1b0dbbe28fcad95a6bf92f",
+  "head": "5748c14aca7dd3763f2e906a03830e57e4fefc35",
+  "artifacts": {
+    "before.apk": "001f6f8572a5906f96dc39b2576c8153daaa7f3958141c21bc5ec0220528dfa0",
+    "after.apk": "efaed1d49c8397c7154c99a29a649f12fc4591cbd7dc14d60087e6cd5783505c"
+  },
+  "operation": {
+    "beforeInitial": "two indicators",
+    "afterInitial": "center only",
+    "loadedRefresh": "one top indicator, rows retained",
+    "returnFromDetail": "one top indicator, rows retained",
+    "empty": "No agents yet",
+    "error": "synthetic 503 / visible Try again",
+    "retry": "normal list restored"
+  },
+  "limits": [
+    "Synthetic localhost API, separate package/signature, no physical device or Play acceptance",
+    "R8/resource shrink true; debuggable false; DEBUG true solely for local API guard; normal Root with no Activity override",
+    "Device fixture 13/14 initial run: first case timed out waiting for composition; isolated retry of failed case passed; new regression passed"
+  ]
+}
