@@ -1,0 +1,9 @@
+{
+  "productionHead": "aeeb8a64a8e3fb81fb56a250a11d3d6479e69e13",
+  "onlyAdditionalSourceChange": "apps/android/app/src/main/java/ai/nuphos/android/MainActivity.kt",
+  "overlaySHA256": "f8b69d4694d7c0e7351f1ebcb8dba143e92fb54c40152b629fe261be622616d2",
+  "recorder": "synthetic temp file; no microphone input",
+  "transport": "NuphosWhisperTransport with Http.client event-listener factory override for synthetic loopback; preserves ConsentInterceptor; not default transport client",
+  "root": "unchanged NuphosRoot/ChatSession/ChatComposer",
+  "artifactSHA256": "2f155ae52cff77667cf9c0c155767c8608dd9451155d927fe12bc09b7228a74a"
+}
