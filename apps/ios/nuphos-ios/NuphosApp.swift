@@ -1,6 +1,5 @@
 import SwiftUI
 
- #if !NUPHOS_SHARE_EXTENSION
 @main
 struct NuphosApp: App {
     #if canImport(UIKit)
@@ -29,8 +28,6 @@ struct NuphosApp: App {
     }
 }
 
-#endif
-
 extension FocusedValues {
     /// Opens the new-chat composer in the focused window.
     @Entry var newChat: (() -> Void)?
@@ -49,7 +46,7 @@ private struct NewChatCommand: Commands {
     }
 }
 
-#if DEBUG && os(iOS) && !NUPHOS_SHARE_EXTENSION
+#if DEBUG && os(iOS)
 /// A stand-in conversation with its desktop open, presented as HomeView presents one: beside the
 /// conversation where the window is wide, else full screen, with "Open desktop" once it is closed.
 private struct PreviewDesktop: View {

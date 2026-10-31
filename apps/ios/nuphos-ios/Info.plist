@@ -17,6 +17,10 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INSendMessageIntent</string>
+	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
@@ -28,7 +32,5 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
-	<key>NuphosSharedKeychainGroup</key>
-	<string>$(AppIdentifierPrefix)ai.nuphos.ios.shared-auth</string>
 </dict>
 </plist>

@@ -30,7 +30,6 @@ final class AuthSession {
             }
         }
     }
-    private(set) var sharingLoginID: UUID?
     private(set) var token: String?
     private(set) var aiConsentAccepted = false
     private(set) var aiConsentVersion: String?
@@ -43,20 +42,6 @@ final class AuthSession {
     var user: NuphosUser? {
         if case .signedIn(let user) = state { return user }
         return nil
-    }
-
-    func restoreForSharing(_ lease: SharedShareSession.Record) async throws {
-        try SharedShareSession.validate(lease)
-        guard ["https", "http"].contains(lease.backend.scheme?.lowercased() ?? ""),
-              lease.backend.host != nil, lease.backend.user == nil, lease.backend.password == nil else { throw SharedShareSession.Failure.identity }
-        NuphosAPI.sharedSessionBaseURL = lease.backend
-        let user = try await NuphosAPI.currentUser(token: lease.token)
-        try SharedShareSession.validate(lease)
-        guard user.id == lease.accountID else { throw SharedShareSession.Failure.identity }
-        token = lease.token
-        await loadAIConsent()
-        guard aiConsentAccepted else { throw SharedShareSession.Failure.unavailable }
-        state = .signedIn(user)
     }
 
     // MARK: - Launch
@@ -77,7 +62,7 @@ final class AuthSession {
         #else
         let previewFixture: String? = nil
         #endif
-        if !CommandLine.arguments.contains("-share-verification") && (CommandLine.arguments.contains("-preview-home") || previewFixture != nil) {
+        if CommandLine.arguments.contains("-preview-home") || previewFixture != nil {
             if previewFixture != nil {
                 URLProtocol.registerClass(PreviewTransport.self)
                 token = "preview-only"
@@ -109,9 +94,9 @@ final class AuthSession {
         do {
             let user = try await NuphosAPI.currentUser(token: saved)
             await loadAIConsent()
-            // A newer sign-out or sign-in wins over this restore response.
+            // Home may already be open from the cache, so the user can sign
+            // out, or in again, before this answers. That session wins.
             guard token == saved else { return }
-            sharingLoginID = try? SharedShareSession.publishLogin(token: saved, accountID: user.id, backend: NuphosAPI.baseURL)
             state = .signedIn(user)
         } catch NuphosAPI.Failure.unauthorized {
             guard token == saved else { return }
@@ -164,7 +149,6 @@ final class AuthSession {
             try Keychain.write(token, for: Self.tokenKey)
             self.token = token
             await loadAIConsent()
-            sharingLoginID = try? SharedShareSession.publishLogin(token: token, accountID: user.id, backend: NuphosAPI.baseURL)
             state = .signedIn(user)
             Analytics.shared.track("login")
         } catch {
@@ -284,8 +268,6 @@ final class AuthSession {
     }
 
     private func clearToken() {
-        sharingLoginID = nil
-        SharedShareSession.revoke()
         Keychain.delete(Self.tokenKey)
         LaunchCache.clear()
         token = nil
@@ -311,9 +293,7 @@ final class AuthSession {
 final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
-            #if NUPHOS_SHARE_EXTENSION
-            return ASPresentationAnchor()
-            #elseif os(macOS)
+            #if os(macOS)
             return NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first ?? ASPresentationAnchor()
             #else
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
