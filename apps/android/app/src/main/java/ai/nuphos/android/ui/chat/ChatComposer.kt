@@ -291,10 +291,11 @@ fun ChatComposer(
     val injectedVoice = LocalVoiceServices.current
     val voiceServices = remember(context, injectedVoice) { injectedVoice ?: deviceVoiceServices(context) }
     val latestText by rememberUpdatedState(text)
-    val latestWrite by rememberUpdatedState<(String) -> Unit> { words ->
-        if (effectiveDraftingEnabled) {
+    val latestWrite by rememberUpdatedState<(String) -> Boolean> { words ->
+        if (!effectiveDraftingEnabled || savingSend) false else {
             val appended = appendDictation(latestText, words)
             updateText(appended)
+            fieldState.text.toString() == appended
         }
     }
     val voiceAuth = ai.nuphos.android.ui.LocalAuthSession.current
@@ -353,7 +354,15 @@ fun ChatComposer(
     BackHandler(enabled = voice.active) { voice.cancel() }
     voice.error?.let { message ->
         AlertDialog(onDismissRequest = { voice.error = null }, title = { Text("Voice input failed") },
-            text = { Text(message) }, confirmButton = { TextButton(onClick = { voice.error = null }) { Text("OK") } })
+            text = { Column {
+                Text(message)
+                voice.pendingText?.let { words -> androidx.compose.foundation.text.selection.SelectionContainer { Text(words) } }
+            } },
+            confirmButton = {
+                if (voice.pendingText != null) TextButton(onClick = voice::retryText) { Text("Add to draft") }
+                else TextButton(onClick = { voice.error = null }) { Text("OK") }
+            },
+            dismissButton = { if (voice.pendingText != null) TextButton(onClick = voice::discardText) { Text("Discard transcript") } })
     }
     val hasText = text.isNotBlank()
     val hasPayload = hasText || attachments.isNotEmpty()
