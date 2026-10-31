@@ -51,6 +51,7 @@ internal fun DesktopScreen(chat: ChatSession,store: AgentStore,onClose: () -> Un
             ai.nuphos.android.session.AiAccess.revision==consentRevision && auth.aiAllowed && chat.canOpenDesktop })
     }
     val decoder=remember(desktop) { DesktopVideo() }
+    val recovery=remember(decoder) { DesktopDecodeRecovery(decoder::drain,decoder::close) }
     var video by remember(desktop) { mutableStateOf(false) }
     DisposableEffect(desktop,lifecycle) {
         val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_PAUSE || event==Lifecycle.Event.ON_STOP) { desktop.stop(); foreground=false; onClose() } }
@@ -59,7 +60,7 @@ internal fun DesktopScreen(chat: ChatSession,store: AgentStore,onClose: () -> Un
         onDispose { lifecycle.removeObserver(observer); desktop.onVideo=null; desktop.stop(); decoder.surface(null) }
     }
     LaunchedEffect(desktop,valid) { if(valid)desktop.start() else { desktop.stop(); onClose() } }
-    LaunchedEffect(decoder) { withContext(Dispatchers.IO) { while(isActive) { try { decoder.drain() } catch(_: Exception) { withContext(Dispatchers.Main) { desktop.stop() } }; delay(16) } } }
+    LaunchedEffect(decoder) { withContext(Dispatchers.IO) { while(isActive) { if(recovery.tick()) withContext(Dispatchers.Main) { video=false; desktop.fail("Could not decode this desktop. Retry to start a fresh connection.") }; delay(16) } } }
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().systemBarsPadding().padding(12.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
@@ -76,7 +77,7 @@ internal fun DesktopScreen(chat: ChatSession,store: AgentStore,onClose: () -> Un
                 DesktopCanvas(desktop,decoder,video)
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Button(onClick={ desktop.control(!desktop.controlling) },enabled=desktop.phase==DesktopSession.Phase.Live) { Text(if(desktop.controlling) "Hand back" else "Take over") }
-                    if(desktop.phase==DesktopSession.Phase.Failed) OutlinedButton(onClick={ video=false; desktop.retry() }) { Text("Retry") }
+                    if(desktop.phase==DesktopSession.Phase.Failed) OutlinedButton(onClick={ recovery.reset(); video=false; desktop.retry() }) { Text("Retry") }
                 }
                 if(desktop.controlling) DesktopKeyboard(desktop)
             }

@@ -20,6 +20,7 @@ internal class DesktopSession(
     private val scope: CoroutineScope, private val current: () -> Boolean,
     private val calls: OkHttpClient = Http.client,
     private val endpoint: String = NuphosApi.BASE_URL,
+    private val timing: DesktopTiming = DesktopTiming(),
 ) {
     enum class Phase { Connecting, Live, Failed, Closed }
     var phase by mutableStateOf(Phase.Closed); private set
@@ -49,12 +50,13 @@ internal class DesktopSession(
                 phase=Phase.Connecting; controlling=false; error=null
                 try { connect(owner) }
                 catch(e: CancellationException) { throw e }
-                catch(e: Exception) { if(!active(owner)) break; if(e is IllegalArgumentException) { phase=Phase.Failed; error=e.message ?: "Unsupported desktop stream."; break }; failures++; if(failures>=6) { phase=Phase.Failed; error="Could not connect to this desktop. Check the computer and try again."; break } }
+                catch(e: Exception) { if(!active(owner)) break; if(e is IllegalArgumentException) { phase=Phase.Failed; error=e.message ?: "Unsupported desktop stream."; break }; failures++; if(failures>=timing.maxFailures) { phase=Phase.Failed; error=if(e is DesktopStalled) "The desktop stopped responding. Retry to reconnect." else "Could not connect to this desktop. Check the computer and try again."; break } }
                 if(active(owner)) delay(minOf(15_000L,1000L shl minOf(failures,4)))
             }
         }
     }
     fun retry() { stop(); start() }
+    fun fail(message: String) { stop(); error=message; phase=Phase.Failed }
     fun stop() {
         // Release held inputs while this connection still owns control, then close even if identity was revoked.
         if(controlling) {
@@ -110,7 +112,7 @@ internal class DesktopSession(
         val chunks=Channel<ByteArray>(64)
         val bufferedBytes=java.util.concurrent.atomic.AtomicInteger()
         val url=base.newBuilder().addPathSegment(opened.toString()).build()
-        val ws=calls.newWebSocket(authorize(Request.Builder().url(url)).build(),object: WebSocketListener() {
+        val ws=calls.newBuilder().pingInterval(15,java.util.concurrent.TimeUnit.SECONDS).build().newWebSocket(authorize(Request.Builder().url(url)).build(),object: WebSocketListener() {
             override fun onMessage(webSocket: WebSocket,text: String) {
                 if(!active(owner) || text.length>RfbProtocol.MAX_BYTES*4/3+4) { webSocket.cancel(); chunks.close(IOException("Invalid desktop frame")); return }
                 val bytes=text.decodeBase64()?.toByteArray()
@@ -123,28 +125,45 @@ internal class DesktopSession(
             override fun onClosed(webSocket: WebSocket,code: Int,reason: String) { chunks.close() }
         })
         if(!active(owner)) { ws.cancel(); throw CancellationException() }; socket=ws
+        val rfbReady=java.util.concurrent.atomic.AtomicBoolean(); val receivedPicture=java.util.concurrent.atomic.AtomicBoolean(); val idle=java.util.concurrent.atomic.AtomicBoolean()
+        val handshakeDeadline=desktopNow()+timing.handshakeMillis
+        val pictureDeadline=java.util.concurrent.atomic.AtomicLong(Long.MAX_VALUE)
+        val connectionProtocol=java.util.concurrent.atomic.AtomicReference<RfbProtocol?>()
+        val refresh=scope.launch {
+            while(active(owner)) {
+                delay(timing.refreshMillis)
+                if(rfbReady.get()) { pictureDeadline.set(desktopNow()+timing.frameMillis); receivedPicture.set(false); connectionProtocol.get()?.request(false) }
+            }
+        }
         try {
             withContext(Dispatchers.IO) {
                 var buffered=ByteArray(0); var offset=0
                 suspend fun read(count: Int): ByteArray {
                     require(count in 0..(RfbProtocol.MAX_PIXELS*4).toInt())
-                    val result=ByteArray(count); var at=0
+                    val result=ByteArray(count); var at=0; val progressDeadline=desktopNow()+timing.progressMillis
                     while(at<count) {
                         ensureCurrent(owner)
-                        if(offset==buffered.size) { buffered=chunks.receive(); bufferedBytes.addAndGet(-buffered.size); offset=0 }
+                        if(offset==buffered.size) {
+                            val deadline=if(!rfbReady.get())handshakeDeadline else if(!receivedPicture.get()) { if(idle.get())pictureDeadline.get() else minOf(pictureDeadline.get(),progressDeadline) } else if(idle.get())Long.MAX_VALUE else progressDeadline
+                            val remaining=deadline-desktopNow()
+                            if(remaining<=0)throw DesktopStalled()
+                            val next=withTimeoutOrNull(minOf(remaining,1000L)) { chunks.receive() } ?: continue
+                            buffered=next; bufferedBytes.addAndGet(-buffered.size); offset=0
+                        }
                         val n=minOf(count-at,buffered.size-offset); buffered.copyInto(result,at,offset,offset+n); at+=n; offset+=n
                     }
                     return result
                 }
                 val rfb=RfbProtocol(::read,{ bytes -> if(active(owner)) ws.send(bytes.toByteString().base64()) },
-                    ready={ w,h -> if(active(owner)) { width=w; height=h; phase=Phase.Live } },
-                    frame={ w,h,pixels -> if(active(owner)) { width=w; height=h; picture=pixels } },
-                    video={ w,h,bytes,flags -> if(active(owner)) { picture=null; onVideo?.invoke(w,h,bytes,flags) } })
-                protocol=rfb
+                    ready={ w,h -> if(active(owner)) { pictureDeadline.set(desktopNow()+timing.frameMillis); rfbReady.set(true); width=w; height=h } },
+                    frame={ w,h,pixels -> if(active(owner)) { receivedPicture.set(true); width=w; height=h; picture=pixels; phase=Phase.Live } },
+                    video={ w,h,bytes,flags -> if(active(owner)) { receivedPicture.set(true); picture=null; onVideo?.invoke(w,h,bytes,flags); phase=Phase.Live } },
+                    waiting={ idle.set(it) })
+                protocol=rfb; connectionProtocol.set(rfb)
                 rfb.use { it.run() }
             }
         } finally {
-            ws.cancel(); chunks.cancel()
+            refresh.cancel(); ws.cancel(); chunks.cancel()
             if(active(owner)) { socket=null; protocol=null; controlling=false; heldKeys.clear(); phase=Phase.Connecting }
         }
     }
@@ -152,3 +171,7 @@ internal class DesktopSession(
     private fun authorize(builder: Request.Builder)=builder.header("Authorization","Bearer $token")
         .header("x-nuphos-ai-consent-version",AccountApi.AI_CONSENT_VERSION).header("x-atlas-client",Http.clientHeader())
 }
+
+internal data class DesktopTiming(val handshakeMillis: Long=10_000,val frameMillis: Long=20_000,val progressMillis: Long=10_000,val refreshMillis: Long=30_000,val maxFailures: Int=6)
+private class DesktopStalled : IOException()
+private fun desktopNow()=System.nanoTime()/1_000_000

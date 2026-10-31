@@ -11,6 +11,7 @@ internal class RfbProtocol(
     private val ready: (Int, Int) -> Unit,
     private val frame: (Int, Int, IntArray) -> Unit,
     private val video: (Int, Int, ByteArray, Int) -> Unit,
+    private val waiting: (Boolean) -> Unit = {},
 ) : AutoCloseable {
     var width = 0; private set
     var height = 0; private set
@@ -40,12 +41,15 @@ internal class RfbProtocol(
         val encodings = listOf(50,16,1,0,-239,-232,-223,-224)
         send(byteArrayOf(2,0) + be16(encodings.size) + encodings.flatMap { be32(it).toList() }.toByteArray())
         ready(width, height); request(false)
-        while (true) when (u8()) {
+        while (true) {
+            waiting(true); val type=u8(); waiting(false)
+            when (type) {
             0 -> { update(); request(true) }
             1 -> { read(3); read(u16() * 6) }
             2 -> Unit
             3 -> { read(3); read(length(1 shl 20)) } // Never apply a remote clipboard to the phone.
             else -> throw IOException("Unsupported desktop message.")
+            }
         }
     }
     fun request(incremental: Boolean) { if (width > 0) send(byteArrayOf(3, if (incremental) 1 else 0) + be16(0) + be16(0) + be16(width) + be16(height)) }
