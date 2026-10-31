@@ -86,4 +86,58 @@ class VoiceInputTest {
         assertEquals("hello\nworld", appendDictation("hello\n", "world"))
         assertEquals("hello ", appendDictation("hello ", "  "))
     }
+    @Test fun explicitSendWritesTranscriptThenInvokesNormalSendOnceWhileIdle() = runTest {
+        val take = Take(); val transport = Transport(); val events = mutableListOf<String>()
+        lateinit var input: VoiceInput
+        input = VoiceInput(VoiceServices(Settings(), transport, { take }), backgroundScope,
+            VoiceAccess("fixture-token", "A", { true })) { events += "text:$it" }
+        input.awaitingPermission(); input.permissionResult(true)
+        input.finish { assertEquals(VoiceInput.Phase.Idle, input.phase); events += "send" }
+        input.finish { fail("Duplicate finish cannot send") }; runCurrent()
+        transport.result.complete(Transcript("spoken words", "english")); runCurrent()
+        assertEquals(listOf("text:spoken words", "send"), events)
+        assertEquals(1, transport.uploads); assertFalse(take.file.exists())
+    }
+
+    @Test fun lostSendAdmissionKeepsTranscriptWithoutCallingSend() = runTest {
+        val take = Take(); val transport = Transport(); var allowed = true; var draft = "Existing"; var sends = 0
+        val input = VoiceInput(VoiceServices(Settings(), transport, { take }), backgroundScope,
+            VoiceAccess("fixture-token", "A", { true })) { draft = appendDictation(draft, it) }
+        input.awaitingPermission(); input.permissionResult(true)
+        input.finish { if (allowed) sends++ }; runCurrent(); allowed = false
+        transport.result.complete(Transcript("spoken words", "english")); runCurrent()
+        assertEquals("Existing spoken words", draft); assertEquals(0, sends)
+        assertEquals(VoiceInput.Phase.Idle, input.phase)
+    }
+
+    @Test fun staleOwnerOrCancellationPreventsExplicitSend() = runTest {
+        for (cancel in listOf(false, true)) {
+            val take = Take(); val transport = Transport(); var current = true; var writes = 0; var sends = 0
+            val input = VoiceInput(VoiceServices(Settings(), transport, { take }), backgroundScope,
+                VoiceAccess("fixture-token", "A", { current })) { writes++ }
+            input.awaitingPermission(); input.permissionResult(true); input.finish { sends++ }; runCurrent()
+            if (cancel) input.cancel() else current = false
+            transport.result.complete(Transcript("late words", "english")); runCurrent()
+            assertEquals(0, writes); assertEquals(0, sends); assertFalse(take.file.exists())
+        }
+    }
+
+    @Test fun emptyTranscriptNeverSendsAnExistingDraft() = runTest {
+        val take = Take(); val transport = Transport(); var draft = "Keep existing draft"; var sends = 0
+        val input = VoiceInput(VoiceServices(Settings(), transport, { take }), backgroundScope,
+            VoiceAccess("fixture-token", "A", { true })) { draft = appendDictation(draft, it) }
+        input.awaitingPermission(); input.permissionResult(true); input.finish { sends++ }; runCurrent()
+        transport.result.complete(Transcript("  ", "english")); runCurrent()
+        assertEquals("Keep existing draft", draft); assertEquals(0, sends); assertNotNull(input.error)
+    }
+
+    @Test fun transcriptionFailureDoesNotInvokeExplicitSend() = runTest {
+        val take = Take(); val transport = Transport(); var sends = 0
+        val input = VoiceInput(VoiceServices(Settings(), transport, { take }), backgroundScope,
+            VoiceAccess("fixture-token", "A", { true })) {}
+        input.awaitingPermission(); input.permissionResult(true); input.finish { sends++ }; runCurrent()
+        transport.result.completeExceptionally(VoiceFailure(503)); runCurrent()
+        assertEquals(0, sends); assertNotNull(input.error); assertFalse(take.file.exists())
+    }
+
 }

@@ -56,6 +56,8 @@ class VoiceInputFixtureDeviceTest {
     private val transport = Transport()
     private var takeFile: File? = null
     private var sends = 0
+    private var submitted = ""
+    private val admission = mutableStateOf(true)
     private lateinit var savedAccess: Any
     private var fixtureStore: AgentStore? = null
     private var fixtureAuth: AuthSession? = null
@@ -104,7 +106,7 @@ class VoiceInputFixtureDeviceTest {
                     Column(Modifier.systemBarsPadding().padding(12.dp)) {
                         Text("FIXTURE · synthetic audio / synthetic OpenAI · no upload", style = MaterialTheme.typography.labelSmall)
                         Spacer(Modifier.weight(1f))
-                        ChatComposer(isStreaming = false, onSend = { sends++; true })
+                        ChatComposer(isStreaming = false, canSubmit = admission.value, onSend = { submitted = it.text; sends++; true })
                     }
                 }
             } }
@@ -114,16 +116,16 @@ class VoiceInputFixtureDeviceTest {
         render()
         compose.onNodeWithContentDescription("Ask Nuphos anything").performTextInput("Existing draft")
         compose.onNodeWithContentDescription("Voice input").performClick()
-        compose.onNodeWithContentDescription("Finish voice input").assertIsEnabled()
+        compose.onNodeWithContentDescription("Transcribe and edit").assertIsEnabled()
         capture("01-recording-fixture")
         compose.onNodeWithContentDescription("Cancel voice input").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().size == 1 }
         compose.onNodeWithContentDescription("Ask Nuphos anything").assertTextContains("Existing draft")
         assertFalse(takeFile!!.exists()); assertEquals(0, transport.uploads)
         compose.onNodeWithContentDescription("Voice input").performClick()
-        compose.onNodeWithContentDescription("Finish voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and edit").performClick()
         compose.onNodeWithText("Transcribing…").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Finish voice input").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Transcribe and edit").assertIsNotEnabled()
         capture("02-transcribing-fixture")
         compose.runOnIdle { transport.reply.complete(Transcript("语音输入测试", "chinese")) }
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().isNotEmpty() }
@@ -134,7 +136,7 @@ class VoiceInputFixtureDeviceTest {
     @Test fun canceledUploadCannotInsertLateResult() {
         render()
         compose.onNodeWithContentDescription("Voice input").performClick()
-        compose.onNodeWithContentDescription("Finish voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and edit").performClick()
         compose.onNodeWithText("Transcribing…").assertIsDisplayed()
         compose.onNodeWithContentDescription("Cancel voice input").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().size == 1 }
@@ -147,7 +149,7 @@ class VoiceInputFixtureDeviceTest {
         render()
         compose.onNodeWithContentDescription("Ask Nuphos anything").performTextInput("Keep")
         compose.onNodeWithContentDescription("Voice input").performClick()
-        compose.onNodeWithContentDescription("Finish voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and edit").performClick()
         compose.onNodeWithText("Transcribing…").assertIsDisplayed()
         compose.runOnIdle { state(requireNotNull(fixtureStore), "selectedTeam", Team("other-fixture-team", "Other workspace")) }
         compose.runOnIdle { transport.reply.complete(Transcript("private late result", "english")) }
@@ -159,12 +161,50 @@ class VoiceInputFixtureDeviceTest {
         render()
         compose.onNodeWithContentDescription("Ask Nuphos anything").performTextInput("Keep this draft")
         compose.onNodeWithContentDescription("Voice input").performClick()
-        compose.onNodeWithContentDescription("Finish voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and edit").performClick()
         compose.runOnIdle { transport.reply.completeExceptionally(VoiceFailure(402)) }
         compose.onNodeWithContentDescription("Ask Nuphos anything").assertTextContains("Keep this draft")
         compose.onNodeWithText("subscription", substring = true).assertIsDisplayed()
         assertEquals(0, sends)
         capture("04-subscription-required")
+    }
+    @Test fun explicitVoiceSendUsesNormalComposerSubmissionOnce() {
+        render()
+        compose.onNodeWithContentDescription("Ask Nuphos anything").performTextInput("Existing draft")
+        compose.onNodeWithContentDescription("Voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and send").performClick()
+        compose.onNodeWithText("Transcribing…").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Transcribe and send").assertIsNotEnabled()
+        compose.runOnIdle { transport.reply.complete(Transcript("spoken words", "english")) }
+        compose.waitUntil(5_000) { sends == 1 }
+        assertEquals("Existing draft spoken words", submitted)
+        assertEquals(1, transport.uploads); assertFalse(takeFile!!.exists())
+        capture("06-explicit-send")
+    }
+    @Test fun admissionLostDuringTranscriptionKeepsEditableText() {
+        render()
+        compose.onNodeWithContentDescription("Ask Nuphos anything").performTextInput("Keep")
+        compose.onNodeWithContentDescription("Voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and send").performClick()
+        compose.runOnIdle { admission.value = false }
+        compose.runOnIdle { transport.reply.complete(Transcript("spoken words", "english")) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Ask Nuphos anything").assertTextContains("Keep spoken words")
+        assertEquals(0, sends); assertEquals(1, transport.uploads)
+        capture("07-admission-keeps-draft")
+    }
+    @Test fun unavailableSendStillAllowsTranscriptionForEditing() {
+        compose.runOnIdle { admission.value = false }
+        render()
+        compose.onNodeWithContentDescription("Voice input").performClick()
+        compose.onNodeWithContentDescription("Transcribe and edit").assertIsEnabled()
+        compose.onNodeWithContentDescription("Transcribe and send").assertIsNotEnabled()
+        capture("08-edit-only")
+        compose.onNodeWithContentDescription("Transcribe and edit").performClick()
+        compose.runOnIdle { transport.reply.complete(Transcript("editable words", "english")) }
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Ask Nuphos anything").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Ask Nuphos anything").assertTextContains("editable words")
+        assertEquals(0, sends)
     }
     @Test fun accountExplainsSubscriptionAndEditsOrResetsPrompt() {
         val services = VoiceServices(settings, transport, { error("No recording from Account") })

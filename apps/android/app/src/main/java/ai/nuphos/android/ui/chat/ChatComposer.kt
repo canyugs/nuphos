@@ -302,7 +302,7 @@ fun ChatComposer(
     val voiceAccount = voiceAuth.user?.id
     val voiceTeam = draft?.key?.teamId ?: store.selectedTeam?.id
     val voiceConsentRevision = ai.nuphos.android.session.AiAccess.revision
-    val latestVoiceAllowed by rememberUpdatedState(effectiveDraftingEnabled && canSubmit)
+    val latestVoiceAllowed by rememberUpdatedState(effectiveDraftingEnabled)
     val voice = remember(draft, voiceServices, voiceToken, voiceAccount, voiceTeam,
         voiceAuth.generation, store.workspaceRevision, voiceConsentRevision) {
         val authGeneration = voiceAuth.generation
@@ -316,13 +316,14 @@ fun ChatComposer(
             unauthorized = { if (current()) voiceAuth.signOut(ai.nuphos.android.data.NuphosApi.Failure.Unauthorized.message) })
         VoiceInput(voiceServices, scope, access) { latestWrite(it) }
     }
+    var voiceSendRequested by remember(draft, voice) { mutableStateOf(false) }
     var permissionTarget by remember { mutableStateOf<VoiceInput?>(null) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permissionTarget?.permissionResult(granted)
         permissionTarget = null
     }
     fun startVoice() {
-        if (voice.active || !effectiveDraftingEnabled || !canSubmit || picking) return
+        if (voice.active || !effectiveDraftingEnabled || picking) return
         try {
             if (!voice.available) { voice.error = "Choose a workspace and confirm your AI sharing choice to use voice input."; return }
             focusManager.clearFocus()
@@ -348,7 +349,7 @@ fun ChatComposer(
         onDispose { lifecycle.removeObserver(observer); voice.cancel() }
     }
     LaunchedEffect(effectiveDraftingEnabled) { if (!effectiveDraftingEnabled) attachmentJob?.cancel() }
-    LaunchedEffect(effectiveDraftingEnabled, canSubmit) { if (!effectiveDraftingEnabled || !canSubmit) voice.cancel() }
+    LaunchedEffect(effectiveDraftingEnabled) { if (!effectiveDraftingEnabled) voice.cancel() }
     BackHandler(enabled = voice.active) { voice.cancel() }
     voice.error?.let { message ->
         AlertDialog(onDismissRequest = { voice.error = null }, title = { Text("Voice input failed") },
@@ -510,6 +511,13 @@ fun ChatComposer(
         }
     }
 
+    LaunchedEffect(voice, voiceSendRequested) {
+        if (voiceSendRequested) {
+            voiceSendRequested = false
+            send() // Read the recomposed transcript and recheck the normal send guards.
+        }
+    }
+
     fun collapse() {
         collapsedByUser = true
         focused = false
@@ -667,7 +675,7 @@ fun ChatComposer(
                 ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (voice.active) VoiceRecordingBar(voice) else BasicTextField(
+                if (voice.active) VoiceRecordingBar(voice, canSend = canSubmit && effectiveDraftingEnabled && !savingSend && !picking, onSendReady = { voiceSendRequested = true }) else BasicTextField(
                     state = fieldState,
                     inputTransformation = InputTransformation {
                         if (!effectiveDraftingEnabled || savingSend) revertAllChanges()
@@ -721,7 +729,7 @@ fun ChatComposer(
                     },
                 )
                 if (!expanded) {
-                    VoiceMic(enabled = canSubmit && effectiveDraftingEnabled && !picking && !voice.active, onClick = ::startVoice)
+                    VoiceMic(enabled = effectiveDraftingEnabled && !picking && !voice.active, onClick = ::startVoice)
                     TrailingButton(isStreaming = isStreaming, hasPayload = hasPayload && canSubmit && !picking && !voice.active,
                         onStop = onStop, onSend = ::send)
                 }
@@ -784,7 +792,7 @@ fun ChatComposer(
                         Icon(Icons.Outlined.ContentPaste, "Paste")
                     }
                     Spacer(Modifier.weight(1f))
-                    VoiceMic(enabled = canSubmit && effectiveDraftingEnabled && !picking && !voice.active, onClick = ::startVoice)
+                    VoiceMic(enabled = effectiveDraftingEnabled && !picking && !voice.active, onClick = ::startVoice)
                     if (isStreaming && onStop != null && hasPayload) {
                         IconButton(onClick = ::send, enabled = canSubmit && !picking && !voice.active, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Outlined.PlaylistAdd, "Queue message")

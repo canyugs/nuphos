@@ -50,7 +50,7 @@ class VoiceInput(private val services: VoiceServices, private val scope: Corouti
             }
         } catch (_: Exception) { cancel(); error = "Could not start recording. Check microphone access and try again." }
     }
-    fun finish() {
+    fun finish(thenSend: (() -> Unit)? = null) {
         if (phase != Phase.Recording) return
         if (!access.current()) { cancel(); return }
         val recording = take ?: return
@@ -67,7 +67,18 @@ class VoiceInput(private val services: VoiceServices, private val scope: Corouti
                     services.traditional(reply.text)
                 } else reply.text
                 ensureActive()
-                if (current == generation && access.current()) onText(words)
+                if (words.isBlank()) {
+                    if (current == generation && access.current()) error = "No speech was detected. Your draft has not been sent."
+                    return@launch
+                }
+                if (current == generation && access.current()) {
+                    onText(words)
+                    if (current == generation && access.current()) {
+                        take = null
+                        phase = Phase.Idle
+                        thenSend?.invoke()
+                    }
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 if (current == generation && access.current()) {
@@ -78,7 +89,7 @@ class VoiceInput(private val services: VoiceServices, private val scope: Corouti
             } finally {
                 file?.delete()
                 recording.cancel()
-                if (current == generation) { take = null; phase = Phase.Idle }
+                if (current == generation && take === recording) { take = null; phase = Phase.Idle }
             }
         }
     }
