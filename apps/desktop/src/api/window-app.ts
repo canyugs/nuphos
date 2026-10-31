@@ -101,7 +101,7 @@ export type WindowAppApi = {
   getPathForFile(file: File): string
   savePastedAttachments(payload: PastedAttachmentPayload): Promise<string[]>
   updaterGetState(): Promise<UpdaterState>
-  updaterCheck(): Promise<UpdaterState>
+  updaterCheck(): Promise<void>
   updaterInstall(): Promise<void>
   onUpdaterStatus(cb: (state: UpdaterState) => void): () => void
   changelogGetState(): Promise<ChangelogState>

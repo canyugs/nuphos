@@ -490,7 +490,6 @@
   "Could not edit message": "Tidak dapat mengedit pesan",
   "Could not fork agent": "Tidak dapat mem-fork agen",
   "Could not import this session": "Tidak dapat mengimpor sesi ini",
-  "Could not install the update. Please try again.": "Tidak dapat memasang pembaruan. Coba lagi.",
   "Could not install {name}": "Tidak dapat menginstal {name}",
   "Could not leave workspace": "Tidak dapat keluar dari workspace",
   "Could not link Discord account": "Tidak dapat menautkan akun Discord",
@@ -1401,6 +1400,7 @@
   "Resource usage": "Penggunaan sumber daya",
   "Restart Nuphos, then check again.": "Mulai ulang Nuphos, lalu periksa lagi.",
   "Restart to update to {version}": "Mulai ulang untuk memperbarui ke {version}",
+  "Restart": "Mulai ulang",
   "Restore workspace panel": "Pulihkan panel workspace",
   "Resume": "Lanjutkan",
   "Resume this trigger": "Lanjutkan pemicu ini",
@@ -2211,5 +2211,14 @@
   "Model settings: {name}, Ultrafast mode on": "Pengaturan model: {name}, mode Ultrafast aktif",
   "Let my phone see and control this Mac": "Izinkan ponsel saya melihat dan mengontrol Mac ini",
   "Nuphos on your phone can show this screen and control it, without your Mac password. macOS asks once to allow Screen Recording and Accessibility. This Mac shows a notice while your phone has control.": "Nuphos di ponsel Anda dapat menampilkan layar ini dan mengontrolnya, tanpa kata sandi Mac Anda. macOS meminta sekali untuk mengizinkan Perekaman Layar dan Aksesibilitas. Mac ini menampilkan pemberitahuan selama ponsel Anda memegang kontrol.",
-  "Could not change phone control": "Tidak dapat mengubah kontrol ponsel"
+  "Could not change phone control": "Tidak dapat mengubah kontrol ponsel",
+  "Updates": "Pembaruan",
+  "Checking for updates…": "Memeriksa pembaruan…",
+  "You're up to date.": "Anda sudah menggunakan versi terbaru.",
+  "Downloading Nuphos {version}…": "Mengunduh Nuphos {version}…",
+  "Nuphos {version} is ready. Restart to finish updating.": "Nuphos {version} siap. Mulai ulang untuk menyelesaikan pembaruan.",
+  "Couldn't check for updates. Check your connection and try again.": "Tidak dapat memeriksa pembaruan. Periksa koneksi Anda dan coba lagi.",
+  "Nuphos downloads updates in the background.": "Nuphos mengunduh pembaruan di latar belakang.",
+  "Check for updates": "Periksa pembaruan",
+  "{percent}% · {done} of {total} · {speed}/s": "{percent}% · {done} dari {total} · {speed}/dtk"
 }
