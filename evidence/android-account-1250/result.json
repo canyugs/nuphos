@@ -1,0 +1,19 @@
+{
+  "head": "5f6d858288a8d73ada61e49b306ca6c84c883e10",
+  "base": "42cdec16887a9f18fb1b0dbbe28fcad95a6bf92f",
+  "apkSha256": "e6c1e0e11b8206c73448cbd760c7d37a38a03f1ea46e863707af90e3d2a587a9",
+  "operation": {
+    "lightAccount": "no drag handle; Account/Done below status inset",
+    "darkAccount": "no drag handle; Account/Done below status inset",
+    "Done": "closed to Agents",
+    "systemBack": "closed to Agents after sheet settled",
+    "scroll": "voice/settings sections reachable, header retained",
+    "keyboard": "prompt focused with visible IME; header retained; hide IME then Done closes",
+    "nestedWorkspace": "default Drag handle still present"
+  },
+  "limits": [
+    "Synthetic localhost account; independent applicationId/test signature; no physical phone or private screenshots",
+    "Normal Root/Activity, R8/resource shrink true, debuggable false, DEBUG true only for local API guard",
+    "No unit tests added for the one-line presentation-only fix; lint and minified build passed"
+  ]
+}
