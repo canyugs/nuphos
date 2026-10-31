@@ -1,3 +1,9 @@
+# Default transport follow-up
+
+At the unchanged production patch aeeb8a64, a follow-up minified full-Root run used the unchanged default NuphosWhisperTransport and its default call factory. MainActivity only substitutes a synthetic recorder; no HTTP factory is overridden. The local HTTP fixture now explicitly sends Connection: close. Transcribe and edit appended the returned words to the existing draft without sending; an explicit Transcribe and send produced exactly one normal ChatSession submission with the existing and latest words. See default-result.json for the artifact/overlay hashes and exact receipt, plus default-result.png and default-send-result.png.
+
+This verifies the default client path against the synthetic API. It does not prove a unique cause for the earlier local failure, nor establish real microphone/provider/Play acceptance. The earlier controlled run and its differences remain documented below.
+
 # Android voice input validation
 
 Production patch: PR #1234, based on 7eb2923e. The current production commit is recorded in manifest2.json.

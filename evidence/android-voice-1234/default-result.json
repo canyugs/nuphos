@@ -1,0 +1,10 @@
+{
+  "source": "aeeb8a64a8e3fb81fb56a250a11d3d6479e69e13",
+  "transport": "unchanged default NuphosWhisperTransport and default call factory",
+  "recorder": "synthetic file, no microphone input",
+  "httpFixture": "explicit Connection: close",
+  "oneSubmission": true,
+  "submittedText": "Retained after admission loss Default transport synthetic transcript Default transport synthetic transcript",
+  "apkSHA256": "1fe57eadd3c32952a22d8f2d916ebb5fb859dc5302379e7de342442f69a2554c",
+  "MainActivityOverlaySHA256": "ac70cedc6f40dfee988ad3e3c02e5fd6ebe48f7e95c858dc59809b0a622f4b18"
+}
