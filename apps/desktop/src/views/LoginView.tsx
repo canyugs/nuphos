@@ -8,7 +8,16 @@ import { NuphosLogo } from '../components/NuphosLogo'
 import { Button } from '../components/ui/button'
 import { toast } from '../components/ui/toast'
 import { useErrorShake } from '../hooks/useErrorShake'
+import { useStableCallback } from '../hooks/useStableCallback'
 import { useTextSwap } from '../hooks/useTextSwap'
+import {
+  cleanCode,
+  CODE_LENGTH,
+  completesCode,
+  hasNonDigits,
+  pasteIntoCode,
+  singleFlight,
+} from '../lib/codeEntry'
 import { signInEmailError } from '../lib/emailDomain'
 import { cssDurationMs, prefersReducedMotion } from '../lib/motion'
 
@@ -99,11 +108,11 @@ export function LoginView({ onLogin }: Props) {
     }
   }
 
-  async function handleVerifyCode() {
-    if (code.length !== 6 || busy) return
+  async function handleVerifyCode(value: string) {
+    if (value.length !== CODE_LENGTH || busy) return
     setBusy('verify')
     try {
-      const user = await api.authEmailVerifyCode(email.trim(), code)
+      const user = await api.authEmailVerifyCode(email.trim(), value)
 
       onLogin(user)
     } catch (e) {
@@ -114,6 +123,17 @@ export function LoginView({ onLogin }: Props) {
       shakeCode()
       codeRef.current?.select()
     }
+  }
+
+  // One verify at a time: the auto-submit and an Enter or click right after it send one request.
+  const verifyLatest = useStableCallback(handleVerifyCode)
+  const [verifyCode] = useState(() => singleFlight(verifyLatest))
+
+  // The sixth digit (typed, pasted or autofilled) submits; Verify stays for a retry.
+  function enterCode(next: string) {
+    clearCodeError()
+    setCode(next)
+    if (completesCode(code, next)) void verifyCode(next)
   }
 
   return (
@@ -190,7 +210,7 @@ export function LoginView({ onLogin }: Props) {
                 className="w-full flex flex-col gap-2.5"
                 onSubmit={(e) => {
                   e.preventDefault()
-                  void handleVerifyCode()
+                  void verifyCode(code)
                 }}
               >
                 <p className="text-[13.5px] text-secondary leading-relaxed">
@@ -200,9 +220,25 @@ export function LoginView({ onLogin }: Props) {
                 <input
                   value={code}
                   ref={codeRef}
-                  onChange={(e) => {
-                    clearCodeError()
-                    setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                  onChange={(e) => enterCode(cleanCode(e.target.value))}
+                  // Typed letters, spaces and symbols never go in; the cursor stays put.
+                  onBeforeInput={(e) => {
+                    if (hasNonDigits(e.data)) e.preventDefault()
+                  }}
+                  onPaste={(e) => {
+                    const input = e.currentTarget
+                    const pasted = pasteIntoCode(
+                      code,
+                      {
+                        start: input.selectionStart ?? code.length,
+                        end: input.selectionEnd ?? code.length,
+                      },
+                      e.clipboardData.getData('text'),
+                    )
+
+                    e.preventDefault()
+                    enterCode(pasted.code)
+                    requestAnimationFrame(() => input.setSelectionRange(pasted.caret, pasted.caret))
                   }}
                   placeholder="000000"
                   inputMode="numeric"
@@ -212,7 +248,7 @@ export function LoginView({ onLogin }: Props) {
                 <Button
                   type="submit"
                   size="lg"
-                  disabled={code.length !== 6 || busy !== null}
+                  disabled={code.length !== CODE_LENGTH || busy !== null}
                   className="w-full titlebar-no-drag"
                 >
                   <span ref={verifyLabelRef} className="t-text-swap">
