@@ -25,6 +25,9 @@ data class ChatMessage(
     val stoppedByUser: Boolean? = null,
     val feedback: String? = null,
 ) {
+    /** Holds the place of a message that couldn't be read. It's never shown or sent. */
+    val isUnreadable: Boolean get() = id.startsWith(UNREADABLE_ID)
+
     enum class Role(val raw: String) {
         User("user"), Assistant("assistant"), System("system");
 
@@ -85,6 +88,9 @@ data class ChatMessage(
     )
 
     companion object {
+        private const val UNREADABLE_ID = "unreadable-message-"
+        fun unreadable(index: Int) = ChatMessage(id = "$UNREADABLE_ID$index", role = Role.System, createdAt = null)
+
         fun user(text: String) = ChatMessage(
             role = Role.User,
             parts = listOf(ChatPart.Text(text = text, state = ChatPart.StreamState.Done)),
@@ -406,7 +412,8 @@ sealed class ChatPart {
 }
 
 /**
- * A conversation's messages from the server. One that can't be read is skipped and logged, without its
+ * A conversation's messages from the server. One that can't be read keeps its place as a hidden
+ * placeholder, because positions in this list are positions on the server. It's logged without its
  * content, so the rest of the conversation still loads and it isn't shown as something it isn't.
  */
 object ReadableChatMessagesSerializer : KSerializer<List<ChatMessage>> {
@@ -417,13 +424,14 @@ object ReadableChatMessagesSerializer : KSerializer<List<ChatMessage>> {
     override fun deserialize(decoder: Decoder): List<ChatMessage> {
         val entries = decoder.decodeSerializableValue(JsonValue.serializer()).arrayValue
             ?: throw SerializationException("messages must be an array")
-        val readable = entries.filter { entry ->
-            !entry["id"]?.stringValue.isNullOrEmpty() && ChatMessage.Role.entries.any { it.raw == entry["role"]?.stringValue }
+        val messages = entries.mapIndexed { index, entry ->
+            val readable = !entry["id"]?.stringValue.isNullOrEmpty() && ChatMessage.Role.entries.any { it.raw == entry["role"]?.stringValue }
+            if (readable) ChatMessageSerializer.from(entry) else ChatMessage.unreadable(index)
         }
-        val skipped = entries.size - readable.size
+        val skipped = messages.count { it.isUnreadable }
         // This model also runs in plain JVM tests, which have no Log.
-        if (skipped > 0) runCatching { Log.w("nuphos.chat", "Skipped $skipped unreadable messages of ${entries.size}") }
-        return readable.map(ChatMessageSerializer::from)
+        if (skipped > 0) runCatching { Log.w("nuphos.chat", "Hid $skipped unreadable messages of ${entries.size}") }
+        return messages
     }
 }
 
