@@ -1,0 +1,32 @@
+BOX_ANDROID_HTTP GET 200 /auth/me
+BOX_ANDROID_HTTP GET 200 /auth/ai-consent
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_HTTP GET 200 /agent/conversations
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes/quota
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP POST 201 /agent/devices/boxes
+BOX_ANDROID_STARTING
+BOX_ANDROID_HTTP POST 200 /test/ready
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes/quota
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_READY
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_HTTP POST 200 /agent/devices/<test-device>/box/pause
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes/quota
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_PAUSED
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP POST 200 /agent/devices/<test-device>/box/resume
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes
+BOX_ANDROID_HTTP GET 200 /teams/<test-team>/agent-runtimes/quota
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_HTTP GET 200 /agent/devices
+BOX_ANDROID_RESUMED
